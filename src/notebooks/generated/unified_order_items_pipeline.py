@@ -5,6 +5,8 @@
 # MAGIC This notebook implements a unified pipeline for order_items_pipeline with:
 # MAGIC - Bronze Layer: File ingestion using Autoloader
 # MAGIC - Silver Layer: SCD Type 2 transformations using Auto CDC
+# MAGIC 
+# MAGIC Note: Gold operations are implemented as separate notebook tasks in the job.
 
 # COMMAND ----------
 

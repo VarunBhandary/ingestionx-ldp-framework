@@ -3,7 +3,7 @@ import json
 import os
 from typing import Dict, Any, List
 from databricks.bundles.core import Bundle, Resources, Variable, variables
-from databricks.bundles.jobs import Job, Task, PipelineTask, CronSchedule, JobEmailNotifications
+from databricks.bundles.jobs import Job, Task, PipelineTask, NotebookTask, CronSchedule, JobEmailNotifications
 from databricks.bundles.pipelines import Pipeline, PipelineLibrary, NotebookLibrary
 
 
@@ -79,25 +79,26 @@ class UnifiedPipelineGenerator:
         if email_config:
             unified_config["email_notifications"] = json.dumps(email_config)
         
-        # Extract and merge pipeline-specific configuration from TSV
+        # Extract and merge pipeline-specific configuration from TSV (only bronze and silver)
         for row in group_rows:
-            if row.get('operation_type') == 'silver' and row.get('pipeline_config'):
+            if row.get('operation_type') in ['silver'] and row.get('pipeline_config'):
                 try:
                     pipeline_specific_config = json.loads(row['pipeline_config'])
-                    print(f"   🔧 Extracted pipeline config: {pipeline_specific_config}")
+                    operation_type = row.get('operation_type')
+                    print(f"   🔧 Extracted {operation_type} pipeline config: {pipeline_specific_config}")
                     
                     # Merge SCD2 and other pipeline-specific settings
                     for key, value in pipeline_specific_config.items():
                         if key not in ['pipeline_group']:  # Avoid overwriting core settings
                             # Convert all values to strings for Databricks compatibility
                             if isinstance(value, (list, dict)):
-                                unified_config[key] = json.dumps(value)
+                                unified_config[key] = str(value)
                             else:
                                 unified_config[key] = str(value)
-                            print(f"      + Added config: {key} = {unified_config[key]}")
+                            print(f"      + Added {operation_type} config: {key} = {unified_config[key]}")
                     
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"      ⚠️  Error parsing pipeline config: {e}")
+                    print(f"      ⚠️  Error parsing {operation_type} pipeline config: {e}")
                     continue
         
         print(f"   📋 Full unified config: {unified_config}")
@@ -163,19 +164,42 @@ class UnifiedPipelineGenerator:
         # Get notification configuration from the silver operation
         notification_config = self._get_notification_config_for_group(pipeline_group, group_rows)
         
-        # Create the job with pipeline task using resource reference
-        # This will resolve to the actual pipeline ID during deployment
+        # Create tasks list starting with the pipeline task
+        tasks = [
+            Task(
+                task_key=f"pipeline_task_{pipeline_group}",
+                pipeline_task=PipelineTask(
+                    pipeline_id=f"${{resources.pipelines.unified_{pipeline_group}_pipeline.id}}"
+                ),
+                run_if="ALL_SUCCESS"
+            )
+        ]
+        
+        # Add gold operation notebook tasks if they exist
+        gold_operations = [row for row in group_rows if row.get('operation_type') == 'gold']
+        for i, gold_op in enumerate(gold_operations):
+            notebook_path = gold_op.get('source_path', '')
+            if notebook_path:
+                # Create a notebook task for the gold operation with explicit dependency
+                gold_task = Task(
+                    task_key=f"gold_notebook_{pipeline_group}_{i}",
+                    notebook_task=NotebookTask(
+                        notebook_path=notebook_path,
+                        base_parameters={
+                            "pipeline_group": pipeline_group,
+                            "operation_type": "gold"
+                        }
+                    ),
+                    depends_on=[{"task_key": f"pipeline_task_{pipeline_group}"}],  # Explicit dependency on pipeline task
+                    run_if="ALL_SUCCESS"  # Run after pipeline task succeeds
+                )
+                tasks.append(gold_task)
+                print(f"      🏆 Added gold notebook task: {notebook_path} (depends on pipeline_task_{pipeline_group})")
+        
+        # Create the job with all tasks
         job = Job(
             name=f"unified_{pipeline_group}_job",
-            tasks=[
-                Task(
-                    task_key=f"pipeline_task_{pipeline_group}",
-                    pipeline_task=PipelineTask(
-                        pipeline_id=f"${{resources.pipelines.unified_{pipeline_group}_pipeline.id}}"
-                    ),
-                    run_if="ALL_SUCCESS"
-                )
-            ],
+            tasks=tasks,
             schedule=CronSchedule(
                 quartz_cron_expression=cron_schedule,
                 timezone_id="UTC"

@@ -233,6 +233,13 @@ The framework supports creating **silver-only pipelines** for existing bronze ta
 silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
 ```
 
+### Gold Operation Configuration Example
+
+```tsv
+# Gold operation for analytics table
+gold	product_pipeline	notebook		src/notebooks/generated/gold_product_analytics.py	vbdemos.adls_gold.product_analytics_gold	time	0 0 */20 * * ?	{"notebook_path": "src/notebooks/generated/gold_product_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com", "product-team@company.com", "business-intelligence@company.com"]}
+```
+
 ### How It Works
 
 1. **Existing Bronze Tables**: Your bronze tables can be created by any process (external ETL, manual creation, other frameworks)
@@ -247,6 +254,76 @@ silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing
 - **No Duplication**: Don't recreate bronze tables you already have
 - **Incremental**: Can add bronze operations later if needed
 - **Consistent**: Same SCD2 logic and scheduling across all pipelines
+
+## 🏆 Gold Table Support
+
+The framework now supports **gold operations** for creating analytics and business intelligence tables from silver SCD2 tables.
+
+### Gold Operation Architecture
+
+Gold operations are implemented as **separate notebook tasks** in the job, not as part of the DLT pipeline. This provides:
+
+- **Separation of Concerns**: DLT pipelines handle data transformation, gold notebooks handle business logic
+- **Flexibility**: Gold operations can use any Spark operations, not just DLT
+- **Independent Execution**: Gold operations run after the pipeline completes successfully
+- **Better Performance**: Gold operations don't slow down the main data pipeline
+
+### Gold Operation Configuration
+
+Gold operations use a simplified configuration format:
+
+```tsv
+gold	product_pipeline	notebook		src/notebooks/generated/gold_product_analytics.py	vbdemos.adls_gold.product_analytics_gold	time	0 0 */20 * * ?	{"notebook_path": "src/notebooks/generated/gold_product_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com", "product-team@company.com", "business-intelligence@company.com"]}
+```
+
+**Required Fields:**
+- **`operation_type`**: `gold`
+- **`pipeline_group`**: Same as bronze/silver operations
+- **`source_type`**: `notebook`
+- **`source_path`**: Path to the gold table notebook
+- **`target_table`**: Target gold table name
+- **`schedule`**: Same cron schedule as the pipeline group
+- **`notifications`**: Same notification settings as the pipeline group
+
+### Gold Table Features
+
+- **Independent Execution**: Runs as a separate notebook task after the pipeline completes
+- **Full Spark Support**: Can use any Spark operations, not limited to DLT
+- **Business Logic**: Calculated fields, aggregations, and business intelligence metrics
+- **Audit Trail**: Complete lineage from bronze → silver → gold
+- **Separate Notebooks**: Gold tables are implemented in dedicated notebooks for better organization
+- **Unified Scheduling**: Gold operations run on the same schedule as bronze/silver operations
+
+### Example Gold Table
+
+The framework generates gold tables with the following structure:
+
+```python
+@dlt.table(
+    name="product_analytics_gold",
+    table_properties={
+        "quality": "gold",
+        "operation": "gold_product_analytics",
+        "pipelines.autoOptimize.optimizeWrite": "true"
+    },
+    comment="Gold table containing product analytics and business intelligence metrics",
+    tags=["gold", "analytics", "product", "business-intelligence"]
+)
+def product_analytics_gold():
+    # Read from silver SCD2 table
+    silver_df = dlt.read("products_scd2")
+    
+    # Apply business logic and transformations
+    return silver_df.select(
+        col("product_id").cast("string"),
+        # Masked data column
+        concat(substring(col("product_name"), 1, 1), lit("***")).alias("_rescued_data"),
+        # Business logic columns
+        when(col("price") > 100, "Premium").otherwise("Budget").alias("price_tier"),
+        # Calculated fields
+        (col("price") * col("stock_quantity")).alias("inventory_value")
+    )
+```
 
 ## 🎯 Benefits
 

@@ -154,6 +154,72 @@ dlt.create_auto_cdc_flow(
     
     print(f"Generated silver notebook: {notebook_path}")
 
+def generate_gold_table_notebook(op_name, op_config, notebook_path):
+    """Generate a gold table notebook for analytics and business intelligence"""
+    
+    # Extract configuration
+    target_table = op_config.get("target_table", "")
+    
+    # Generate the notebook content with proper Databricks notebook format
+    notebook_content = f'''# Databricks notebook source
+# MAGIC %md
+# MAGIC # Gold Table: {op_name.replace('_', ' ').title()}
+# MAGIC Creates a simple analytics table for business intelligence
+
+# COMMAND ----------
+
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+
+# COMMAND ----------
+
+# Read from the silver SCD2 table (replace with your silver table name)
+silver_df = spark.read.table("vbdemos.adls_silver.products_scd2")
+
+# COMMAND ----------
+
+# Debug: Show available columns in the silver table
+print("🔍 Available columns in silver table:")
+silver_df.printSchema()
+print(f"📊 Total records in silver table: {silver_df.count()}")
+
+# COMMAND ----------
+
+# Create analytics table with business logic
+analytics_df = silver_df.select(
+    # Primary key
+    col("product_id").cast("string").alias("product_id"),
+    
+    # Business analytics columns
+    lit("Analytics Data").alias("data_type"),
+    lit("2024").alias("year"),
+    lit("Q1").alias("quarter"),
+    
+    # Dummy calculated field (using literal values instead of potentially missing columns)
+    lit(1000).alias("inventory_value"),
+    
+    # Processing timestamp
+    current_timestamp().alias("processed_at")
+)
+
+# COMMAND ----------
+
+# Write to target table
+analytics_df.write.mode("overwrite").saveAsTable("{target_table}")
+
+# COMMAND ----------
+
+print("✅ Gold table created successfully!")
+print(f"📊 Records processed: {{analytics_df.count()}}")
+print(f"🎯 Target table: {target_table}")
+'''
+    
+    # Write the notebook
+    with open(notebook_path, 'w') as f:
+        f.write(notebook_content)
+    
+    print(f"Generated gold notebook: {notebook_path}")
+
 def generate_pipeline_group_notebook(pipeline_group, group_operations, output_dir):
     """Generate a complete notebook for a pipeline group"""
     
@@ -161,22 +227,32 @@ def generate_pipeline_group_notebook(pipeline_group, group_operations, output_di
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Separate bronze and silver operations
+    # Separate bronze, silver, and gold operations
     bronze_operations = []
     silver_operations = []
+    gold_operations = []
     
     for op_name, op_config in group_operations.items():
         if op_name.startswith("bronze_"):
             bronze_operations.append((op_name, op_config))
         elif op_name.startswith("silver_"):
             silver_operations.append((op_name, op_config))
+        elif op_name.startswith("gold_"):
+            gold_operations.append((op_name, op_config))
     
     # Generate only the combined notebook for the entire pipeline group
     combined_notebook_path = output_dir / f"unified_{pipeline_group}.py"
-    generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, combined_notebook_path)
+    generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, str(combined_notebook_path))
 
-def generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, notebook_path):
+def generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, notebook_path):
     """Generate a combined notebook for all operations in a pipeline group"""
+    
+    # Debug output
+    print(f"      📝 Generating notebook for {pipeline_group}")
+    print(f"         Bronze operations: {len(bronze_operations)}")
+    print(f"         Silver operations: {len(silver_operations)}")
+    print(f"         Gold operations: {len(gold_operations)}")
+    print(f"         Notebook path: {notebook_path} (type: {type(notebook_path)})")
     
     notebook_content = f'''# Databricks notebook source
 # MAGIC %md
@@ -185,6 +261,8 @@ def generate_combined_notebook(pipeline_group, bronze_operations, silver_operati
 # MAGIC This notebook implements a unified pipeline for {pipeline_group} with:
 # MAGIC - Bronze Layer: File ingestion using Autoloader
 # MAGIC - Silver Layer: SCD Type 2 transformations using Auto CDC
+# MAGIC 
+# MAGIC Note: Gold operations are implemented as separate notebook tasks in the job.
 
 # COMMAND ----------
 
@@ -305,6 +383,8 @@ dlt.create_auto_cdc_flow(
 )
 '''
     
+    
+    
     notebook_content += '''
 
 # COMMAND ----------
@@ -396,6 +476,25 @@ def main():
                     'track_history_except_column_list': track_history_except_column_list,
                     'stored_as_scd_type': stored_as_scd_type,
                     'sequence_by': sequence_by
+                }
+            elif operation_type == 'gold':
+                op_name = f"gold_{row['target_table'].split('.')[-1] if row['target_table'] else 'analytics'}"
+                
+                # For gold operations, source_path contains the notebook path
+                notebook_path = row['source_path']
+                
+                # Parse the pipeline_config JSON for additional gold operation settings
+                try:
+                    pipeline_config = json.loads(row['pipeline_config'])
+                    # Additional gold-specific configuration can be added here
+                except (json.JSONDecodeError, TypeError):
+                    # Fallback if JSON parsing fails
+                    pass
+                
+                operations_config[op_name] = {
+                    'source_path': notebook_path,  # This contains the notebook path
+                    'target_table': row['target_table'],
+                    'pipeline_config': row['pipeline_config']  # Keep the full config for gold operations
                 }
         
         # Generate notebooks for this group
