@@ -30,100 +30,103 @@ class UnifiedPipelineGenerator:
         print(f"📋 Loaded {len(df)} pipeline configurations")
         return df
 
-    def create_unified_pipeline(self, pipeline_group: str, group_rows: List[pd.Series]) -> Pipeline:
-        """Create a single unified DLT pipeline that handles multiple operations within a group."""
+    def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
+        """Create a unified pipeline for a pipeline group using static generated notebooks"""
         
         print(f"🔧 Creating unified pipeline for group: {pipeline_group}")
         print(f"   📊 Operations in group: {len(group_rows)}")
         
-        # Get common configuration from the first row
+        # Find the appropriate generated notebook for this pipeline group
+        notebook_path = f"src/notebooks/generated/unified_{pipeline_group}.py"
+        
+        # Create the pipeline library
+        pipeline_library = PipelineLibrary(
+            notebook=NotebookLibrary(
+                path=notebook_path
+            )
+        )
+        
+        # Get the first row to extract common configuration
         first_row = group_rows[0]
-        cluster_size = first_row.get('cluster_size', 'medium')
-        cluster_config = first_row.get('cluster_config', '')
         
-        # Parse email notifications from the first row
-        email_notifications = {}
-        if first_row.get('email_notifications') and pd.notna(first_row['email_notifications']):
+        # Extract common configuration
+        cluster_size = first_row.get("cluster_size", "medium")
+        cluster_config = first_row.get("cluster_config", "")
+        email_notifications = first_row.get("email_notifications", "{}")
+        
+        # Get the fastest schedule from all operations in the group
+        unified_schedule = self._get_unified_schedule_for_group(pipeline_group, [pd.Series(row) for row in group_rows])
+        
+        # Parse email notifications
+        email_config = {}
+        if email_notifications and email_notifications != "{}":
             try:
-                email_notifications = json.loads(first_row['email_notifications'])
-            except json.JSONDecodeError:
-                print(f"Warning: Invalid JSON in email_notifications for {pipeline_group}")
+                email_config = json.loads(email_notifications)
+            except (json.JSONDecodeError, TypeError):
+                pass
         
-        # Build unified configuration with all operations
+        # Create unified configuration
         unified_config = {
             "pipeline_group": pipeline_group,
             "pipelines.enableDPMForExistingPipeline": "true",
             "pipelines.setMigrationHints": "true",
             "pipelines.autoOptimize.optimizeWrite": "true",
-            "pipelines.autoOptimize.autoCompact": "true"
+            "pipelines.autoOptimize.autoCompact": "true",
+            "pipelines.trigger.interval": "10 minutes"  # Default fallback
         }
         
         # Add email notifications if specified
-        if email_notifications:
-            unified_config["email_notifications"] = json.dumps(email_notifications)
+        if email_config:
+            unified_config["email_notifications"] = json.dumps(email_config)
         
-        # Determine unified scheduling strategy for the pipeline group
-        unified_schedule = self._get_unified_schedule_for_group(pipeline_group, group_rows)
+        # Add unified scheduling
         if unified_schedule:
-            unified_config["pipelines.trigger.interval"] = unified_schedule
-            print(f"   ⏰ Applied unified schedule: {unified_schedule}")
+            # Ensure the trigger interval is properly formatted for Databricks
+            trigger_interval = f'"{unified_schedule}"'  # Wrap in quotes as per Databricks requirements
+            unified_config["pipelines.trigger.interval"] = trigger_interval
+            print(f"   ⏰ Applied unified schedule: {trigger_interval}")
         
-        # Build operations configuration
-        operations_config = {}
+        # Extract and merge pipeline-specific configuration from TSV
         for row in group_rows:
-            pipeline_type = row['pipeline_type']
-            operation_name = f"{pipeline_type}_{pipeline_group.split('_')[0]}"  # e.g., bronze_customer, silver_customer
-            
-            if pipeline_type == 'bronze':
-                # Bronze operation configuration
-                operations_config[operation_name] = {
-                    "source_path": row.get('source_path', ''),
-                    "target_table": row.get('target_table', ''),
-                    "file_format": row.get('file_format', 'csv'),
-                    "schema_location": "",
-                    "checkpoint_location": ""
-                }
-                
-                # Parse pipeline_config for bronze
-                if row.get('pipeline_config') and pd.notna(row['pipeline_config']):
-                    try:
-                        bronze_config = json.loads(row['pipeline_config'])
-                        operations_config[operation_name].update(bronze_config)
-                    except json.JSONDecodeError:
-                        print(f"Warning: Invalid JSON in pipeline_config for bronze operation {operation_name}")
-                
-            elif pipeline_type == 'silver':
-                # Silver operation configuration
-                operations_config[operation_name] = {
-                    "bronze_table": row.get('source_path', ''),  # source_path contains bronze table for silver
-                    "target_table": row.get('target_table', ''),
-                    "keys": [],
-                    "track_history_except_column_list": [],
-                    "stored_as_scd_type": "2",
-                    "sequence_by": "_ingestion_timestamp"
-                }
-                
-                # Parse pipeline_config for silver
-                if row.get('pipeline_config') and pd.notna(row['pipeline_config']):
-                    try:
-                        silver_config = json.loads(row['pipeline_config'])
-                        operations_config[operation_name].update(silver_config)
-                    except json.JSONDecodeError:
-                        print(f"Warning: Invalid JSON in pipeline_config for silver operation {operation_name}")
+            if row.get('operation_type') == 'silver' and row.get('pipeline_config'):
+                try:
+                    pipeline_specific_config = json.loads(row['pipeline_config'])
+                    print(f"   🔧 Extracted pipeline config: {pipeline_specific_config}")
+                    
+                    # Merge SCD2 and other pipeline-specific settings
+                    for key, value in pipeline_specific_config.items():
+                        if key not in ['pipeline_group']:  # Avoid overwriting core settings
+                            # Convert all values to strings for Databricks compatibility
+                            if isinstance(value, (list, dict)):
+                                unified_config[key] = json.dumps(value)
+                            else:
+                                unified_config[key] = str(value)
+                            print(f"      + Added config: {key} = {unified_config[key]}")
+                    
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"      ⚠️  Error parsing pipeline config: {e}")
+                    continue
         
-        # Add operations to unified config
-        unified_config["operations_config"] = json.dumps(operations_config)
-        print(f"   🔧 Added {len(operations_config)} operations to unified pipeline")
+        print(f"   📋 Full unified config: {unified_config}")
         
-        # Handle serverless vs traditional cluster configuration
+        # Force all pipelines to serverless for quick testing
+        is_serverless = True
         cluster_config_dict = None
-        is_serverless = cluster_size == 'serverless'
         
-        if is_serverless:
-            print(f"   🚀 Applied serverless config: Databricks will handle compute automatically")
-        else:
-            cluster_config_dict = self._get_cluster_config(cluster_size, cluster_config)
-            print(f"   🔧 Applied cluster config: {cluster_size} - {cluster_config_dict}")
+        print(f"   🚀 Applied serverless config: Databricks will handle compute automatically")
+        
+        # Determine the correct schema for this pipeline (should be silver schema)
+        target_schema = "adls_bronze"  # Default fallback
+        for row in group_rows:
+            if row.get('operation_type') == 'silver':
+                target_table = row.get('target_table', '')
+                if target_table and '.' in target_table:
+                    # Extract schema from target_table (e.g., vbdemos.adls_silver.orders_scd2)
+                    parts = target_table.split('.')
+                    if len(parts) >= 2:
+                        target_schema = parts[1]  # Get the schema part
+                        print(f"   🎯 Using target schema: {target_schema} (from {target_table})")
+                        break
         
         # Create the unified pipeline
         pipeline = Pipeline(
@@ -131,20 +134,25 @@ class UnifiedPipelineGenerator:
             libraries=[pipeline_library],
             configuration=unified_config,
             catalog="vbdemos",  # Default catalog
-            schema="adls_bronze",  # Default schema for unified pipeline
+            schema=target_schema,  # Use the correct schema (silver, not bronze)
             tags={
                 "deployment_type": "unified_framework",
                 "pipeline_group": pipeline_group,
-                "cluster_size": cluster_size,
+                "cluster_size": "serverless",  # Always serverless for testing
                 "framework": "unified-autoloader-pydab"
             },
             edition="ADVANCED",
             development=False,
-            continuous=False,  # Use triggered mode for unified pipelines
+            continuous=False,  # Set to False for triggered pipelines with schedules
             photon=False,
             serverless=is_serverless,
-            clusters=[cluster_config_dict] if cluster_config_dict else None
+            clusters=None  # No clusters needed for serverless
         )
+        
+        print(f"   🎯 Created pipeline '{pipeline.name}' with configuration:")
+        print(f"      - Trigger interval: {unified_config.get('pipelines.trigger.interval', 'Not set')}")
+        print(f"      - Continuous mode: {pipeline.continuous}")
+        print(f"      - Serverless: {pipeline.serverless}")
         
         return pipeline
 
@@ -158,6 +166,7 @@ class UnifiedPipelineGenerator:
             schedule = row.get('schedule', '')
             if schedule and pd.notna(schedule):
                 schedules.append(schedule)
+                print(f"        📅 Found schedule: '{schedule}'")
         
         if not schedules:
             print(f"        📅 No schedules found, using default: 10 minutes")
@@ -225,14 +234,21 @@ class UnifiedPipelineGenerator:
         if not cron_expression:
             return "10 minutes"
         
+        # Clean the cron expression
+        cron_expr = cron_expression.strip()
+        print(f"        🔍 Parsing cron expression: '{cron_expr}'")
+        
         # Common cron patterns and their corresponding intervals
         cron_patterns = {
+            # Minute-based intervals
             "0 */5 * * *": "5 minutes",
             "0 */10 * * *": "10 minutes",
             "0 */15 * * *": "15 minutes",
             "0 */20 * * *": "20 minutes",
             "0 */25 * * *": "25 minutes",
             "0 */30 * * *": "30 minutes",
+            
+            # Hour-based intervals
             "0 * * * *": "1 hour",
             "0 */2 * * *": "2 hours",
             "0 */3 * * *": "3 hours",
@@ -240,12 +256,71 @@ class UnifiedPipelineGenerator:
             "0 */6 * * *": "6 hours",
             "0 */8 * * *": "8 hours",
             "0 */12 * * *": "12 hours",
+            
+            # Daily at specific times
             "0 0 * * *": "1 day",
-            "0 0 * * 0": "1 week",
-            "0 0 1 * *": "1 month"
+            "0 6 * * *": "1 day",  # Daily at 6 AM
+            "0 9 * * *": "1 day",  # Daily at 9 AM
+            "0 12 * * *": "1 day", # Daily at 12 PM
+            "0 18 * * *": "1 day", # Daily at 6 PM
+            "0 23 * * *": "1 day", # Daily at 11 PM
+            
+            # Weekly on specific days
+            "0 0 * * 0": "1 week",  # Weekly on Sunday
+            "0 0 * * 1": "1 week",  # Weekly on Monday
+            "0 0 * * 2": "1 week",  # Weekly on Tuesday
+            "0 0 * * 3": "1 week",  # Weekly on Wednesday
+            "0 0 * * 4": "1 week",  # Weekly on Thursday
+            "0 0 * * 5": "1 week",  # Weekly on Friday
+            "0 0 * * 6": "1 week",  # Weekly on Saturday
+            
+            # Weekly on specific days at specific times
+            "0 9 * * 1": "1 week",  # Weekly on Monday at 9 AM
+            "0 9 * * 2": "1 week",  # Weekly on Tuesday at 9 AM
+            "0 9 * * 3": "1 week",  # Weekly on Wednesday at 9 AM
+            "0 9 * * 4": "1 week",  # Weekly on Thursday at 9 AM
+            "0 9 * * 5": "1 week",  # Weekly on Friday at 9 AM
+            
+            # Monthly on specific dates
+            "0 0 1 * *": "1 month",   # Monthly on 1st
+            "0 0 15 * *": "1 month",  # Monthly on 15th
+            "0 0 28 * *": "1 month",  # Monthly on 28th
+            "0 0 30 * *": "1 month",  # Monthly on 30th
+            
+            # Monthly on specific dates at specific times
+            "0 12 1 * *": "1 month",  # Monthly on 1st at 12 PM
+            "0 12 15 * *": "1 month", # Monthly on 15th at 12 PM
+            "0 12 28 * *": "1 month", # Monthly on 28th at 12 PM
+            "0 12 30 * *": "1 month"  # Monthly on 30th at 12 PM
         }
         
-        return cron_patterns.get(cron_expression.strip(), "10 minutes")
+        # Try exact match first
+        if cron_expr in cron_patterns:
+            result = cron_patterns[cron_expr]
+            print(f"        ⏰ Exact match: '{cron_expr}' → '{result}'")
+            return result
+        
+        # Try to parse more complex cron expressions
+        try:
+            # Parse the cron expression to extract the minute interval
+            parts = cron_expr.split()
+            if len(parts) >= 2:
+                minute_part = parts[1]
+                if minute_part.startswith("*/"):
+                    interval = minute_part[2:]
+                    if interval.isdigit():
+                        interval_val = int(interval)
+                        if interval_val <= 60:
+                            result = f"{interval_val} minutes"
+                            print(f"        ⏰ Parsed interval: '{cron_expr}' → '{result}'")
+                            return result
+        except Exception as e:
+            print(f"        ⚠️  Error parsing cron expression '{cron_expr}': {e}")
+        
+        # Fallback to default
+        result = "10 minutes"
+        print(f"        ⚠️  No match found for '{cron_expr}', using default: '{result}'")
+        return result
 
     def generate_resources(self) -> tuple[List[Pipeline], List[Job]]:
         """Generate unified DLT pipelines from configuration."""
@@ -261,7 +336,7 @@ class UnifiedPipelineGenerator:
         jobs = []
         
         print(f"\n📊 Found {len(pipeline_groups)} pipeline groups:")
-        for group_name, group_df in pipeline_groups.items():
+        for group_name, group_df in pipeline_groups:
             print(f"  📁 {group_name}: {len(group_df)} operations")
             
             # Create unified pipeline for this group

@@ -1,90 +1,104 @@
-# Azure Databricks Unified Pipeline Framework
+# AutoLoader Framework - Unified Pipeline Architecture
 
-A simplified framework that combines bronze (ingestion) and silver (transformation) layer pipelines into unified DLT pipelines using Azure Databricks, Delta Live Tables (DLT), and Databricks Asset Bundles (PyDABs).
-
-## 🏗️ Architecture
-
-```
-Azure Data Lake Storage → Unified Pipeline → Delta Live Tables → Delta Tables
-                                    ↓
-                              Bronze + Silver Operations
-                                    ↓
-                              Grouped by Pipeline Group
-```
-
-**Unified Data Architecture:**
-- **Bronze Layer**: Raw data ingestion with Auto Loader
-- **Silver Layer**: Clean, quality-checked data with Auto CDC SCD Type 2
-- **Unified Processing**: Single pipeline handles both operations efficiently
+A modern, declarative data pipeline framework for Databricks that combines bronze and silver layer operations into unified, configurable pipelines using Delta Live Tables (DLT) and Auto Loader.
 
 ## 🚀 Features
 
-- **Unified Pipeline Processing**: Single pipeline handles both bronze (ingestion) and silver (transformation) operations
-- **Automatic Grouping**: Related operations are automatically grouped by pipeline_group for efficient processing
-- **DLT Pipelines**: Delta Live Tables for streaming data processing
-- **Flexible Cluster Configuration**: Support for small, medium, large, and serverless compute
-- **Email Notifications**: Configurable success/failure notifications
-- **Resource Tagging**: Automatic tagging for cost tracking and monitoring
-- **Simplified Configuration**: Single TSV file for all pipeline configurations
+- **Unified Pipeline Architecture**: Single declarative pipeline per pipeline group handling both bronze and silver operations
+- **Auto Loader Integration**: Seamless file ingestion with Unity Catalog compatible metadata tracking
+- **SCD Type 2 Support**: Built-in Slowly Changing Dimensions with Auto CDC for historical data tracking
+- **Change Data Feed (CDF)**: Enabled on bronze tables for audit and change tracking
+- **Declarative Configuration**: Simple TSV-based configuration for pipeline definitions
+- **Static Notebook Generation**: Pre-generated notebooks for each pipeline group ensuring DLT compatibility
+- **Unity Catalog Ready**: Full compatibility with Databricks Unity Catalog
+- **Audit Trail**: Comprehensive file metadata tracking including filename, path, and modification time
+
+## 🏗️ Architecture
+
+The framework uses a **unified pipeline approach** where each `pipeline_group` contains:
+- **Bronze Layer**: File ingestion using Auto Loader with audit columns
+- **Silver Layer**: SCD Type 2 transformations using Auto CDC
+- **Unified Configuration**: Single config row per operation type (bronze/silver)
+
+### Key Components
+
+1. **Configuration Layer** (`config/unified_pipeline_config.tsv`)
+   - Pipeline grouping by business domain
+   - Bronze and silver operation definitions
+   - Unified configuration for both layers
+
+2. **Notebook Generator** (`resources/notebook_generator.py`)
+   - Generates static DLT notebooks for each pipeline group
+   - Ensures Unity Catalog compatibility
+   - Creates proper audit column structure
+
+3. **Resource Generator** (`resources/unified_pipeline_generator.py`)
+   - Creates DLT pipeline definitions from configuration
+   - Manages pipeline scheduling and configuration
+   - Handles cluster and notification settings
+
+4. **Generated Notebooks** (`src/notebooks/generated/`)
+   - Static, DLT-compatible notebooks
+   - One notebook per pipeline group
+   - Bronze and silver operations in single pipeline
 
 ## 📁 Project Structure
 
 ```
 autloader-framework-pydab/
-├── src/
-│   ├── notebooks/                    # Core pipeline notebooks
-│   │   └── unified_pipeline.py       # Unified bronze & silver pipeline
-│   └── utils/
-│       └── config_parser.py          # TSV configuration parser
-├── resources/
-│   └── unified_pipeline_generator.py # Unified resource generation
 ├── config/
-│   └── unified_pipeline_config.tsv   # Unified configuration for all pipelines
-├── docs/
-│   ├── DEVELOPER.md                  # Framework extension guide
-│   └── USER_GUIDE.md                 # User deployment guide
-├── databricks.yml                    # Main bundle configuration
-├── UNIFIED_FRAMEWORK_README.md       # Unified framework documentation
-└── README.md                         # This file
+│   └── unified_pipeline_config.tsv          # Unified configuration
+├── resources/
+│   ├── notebook_generator.py                # Static notebook generator
+│   └── unified_pipeline_generator.py        # DLT pipeline generator
+├── src/notebooks/
+│   └── generated/                           # Generated DLT notebooks
+│       ├── unified_product_pipeline.py
+│       ├── unified_customer_pipeline.py
+│       └── ...
+├── databricks.yml                           # Bundle configuration
+└── README.md
 ```
 
+## ⚙️ Configuration
 
+### Configuration Schema
 
-## 📋 Unified Configuration Fields
+The `unified_pipeline_config.tsv` file defines:
 
-| Field | Description | Required | Example |
-|-------|-------------|----------|---------|
-| `pipeline_type` | Type of operation: `bronze` or `silver` | Yes | `bronze` |
-| `pipeline_group` | Group name for related operations | Yes | `customer_pipeline` |
-| `source_type` | Source storage type (bronze only) | Bronze only | `adls` |
-| `source_path` | Source data path (bronze only) | Bronze only | `abfss://container@storage.dfs.core.windows.net/path/` |
-| `target_table` | Target table name | Yes | `catalog.schema.table_name` |
-| `file_format` | Source file format (bronze only) | Bronze only | `csv`, `json`, `parquet` |
-| `trigger_type` | Pipeline trigger type | Yes | `file`, `time` |
-| `schedule` | Cron schedule for time-based triggers | Silver only | `0 */10 * * *` |
-| `pipeline_config` | **Unified configuration** (JSON) | Yes | See examples below |
-| `cluster_size` | Compute size (small/medium/large/serverless) | Yes | `medium` |
-| `cluster_config` | Additional cluster configuration | No | JSON string or empty |
-| `email_notifications` | Email notification settings | No | JSON with recipients and triggers |
+| Column | Description | Example |
+|--------|-------------|---------|
+| `operation_type` | Layer type (bronze/silver) | `bronze`, `silver` |
+| `pipeline_group` | Business domain grouping | `product_pipeline` |
+| `source_type` | Source data type | `file`, `table` |
+| `file_format` | File format for bronze | `csv`, `json` |
+| `source_path` | Source location | `abfss://...` |
+| `target_table` | Target table path | `vbdemos.adls_bronze.products_new` |
+| `trigger_type` | Pipeline trigger | `time` |
+| `schedule` | Cron schedule | `0 */10 * * *` |
+| `pipeline_config` | JSON configuration | `{"keys": ["product_id"], ...}` |
+| `cluster_size` | Cluster configuration | `medium` |
+| `notifications` | Email notifications | `{"email_on_success": "true"}` |
 
-## 🔧 Pipeline Configuration Examples
+### Pipeline Configuration JSON
 
-### Bronze Layer (File Ingestion)
+#### Bronze Operations
 ```json
 {
   "schema_location": "abfss://.../schema",
   "checkpoint_location": "abfss://.../checkpoint",
-  "cloudFiles.maxFilesPerTrigger": "100",
+  "cloudFiles.maxFilesPerTrigger": "200",
   "cloudFiles.allowOverwrites": "false",
-  "header": "true"
+  "header": "true",
+  "inferSchema": "true"
 }
 ```
 
-### Silver Layer (SCD Type 2)
+#### Silver Operations
 ```json
 {
-  "keys": ["customer_id"],
-  "track_history_except_column_list": ["name", "email", "phone"],
+  "keys": ["product_id"],
+  "track_history_except_column_list": ["product_name", "category"],
   "stored_as_scd_type": "2",
   "sequence_by": "_ingestion_timestamp"
 }
@@ -92,58 +106,101 @@ autloader-framework-pydab/
 
 ## 🚀 Quick Start
 
-1. **Clone and Configure**:
-   ```bash
-   git clone <repository-url>
-   cd autloader-framework-pydab
-   ```
+### 1. Configure Your Pipelines
 
-2. **Update Configuration**:
-   - Edit `config/unified_pipeline_config.tsv` with your data sources
-   - Group related bronze and silver operations by `pipeline_group`
+Edit `config/unified_pipeline_config.tsv` to define your pipeline groups:
 
-3. **Deploy**:
-   ```bash
-   databricks bundle deploy
-   ```
-
-## 📧 Email Notifications
-
-Configure email notifications for pipeline success/failure:
-
-```json
-{
-  "email_on_success": true,
-  "email_on_failure": true,
-  "recipients": ["admin@company.com", "data-team@company.com"]
-}
+```tsv
+bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 */10 * * *	{"schema_location": "abfss://...", "checkpoint_location": "abfss://..."}	medium	{"email_on_success": "true"}
+silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 */10 * * * *	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	medium	{"email_on_success": "true"}
 ```
 
-## 🏷️ Resource Tagging
+### 2. Generate Notebooks
 
-All deployed resources are automatically tagged with:
-- `deployment_type: unified_framework`
-- `framework: unified-autoloader-pydab`
-- `pipeline_type: bronze/silver`
-- `pipeline_group: [group_name]`
+```bash
+python resources/notebook_generator.py
+```
 
-## 📚 Documentation
+### 3. Deploy to Databricks
 
-- **[Developer Guide](docs/DEVELOPER.md)**: Extending the framework
-- **[User Guide](docs/USER_GUIDE.md)**: Deploying unified pipelines
-- **[Unified Framework Guide](UNIFIED_FRAMEWORK_README.md)**: Complete unified framework documentation
+```bash
+databricks bundle deploy --profile dev
+```
 
-## 🔗 References
+## 🔧 Generated Pipeline Features
 
-- [Azure Databricks Auto Loader](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/)
-- [Delta Live Tables](https://learn.microsoft.com/en-us/azure/databricks/delta-live-tables/)
-- [Databricks Asset Bundles](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/bundles/)
-- [Auto CDC Documentation](https://learn.microsoft.com/en-us/azure/databricks/dlt/cdc)
+### Bronze Layer
+- **Auto Loader Integration**: Handles file ingestion with schema inference
+- **Audit Columns**: 
+  - `_ingestion_timestamp`: Processing timestamp
+  - `_filename`: Source filename
+  - `_file_path`: Full file path
+  - `_file_modification_time`: File modification time
+- **CDF Enabled**: Change Data Feed for tracking changes
+- **Optimization**: Auto-optimize and auto-compact enabled
+
+### Silver Layer
+- **SCD Type 2**: Historical data tracking with start/end timestamps
+- **Auto CDC**: Change Data Capture for incremental processing
+- **Sequencing**: Uses `_ingestion_timestamp` for proper ordering
+- **History Tracking**: Configurable columns for change tracking
+
+## 📊 Example Pipeline
+
+### Product Pipeline Group
+
+1. **Bronze Operation**: Ingests CSV files from Azure Data Lake Storage
+2. **Silver Operation**: Creates SCD Type 2 table with product history
+3. **Unified Processing**: Both operations run in the same DLT pipeline
+
+```python
+# Bronze: File ingestion with audit columns
+@dlt.table(name="products_new", table_properties={"delta.enableChangeDataFeed": "true"})
+def products_new():
+    return spark.readStream.format("cloudFiles")...
+
+# Silver: SCD Type 2 with Auto CDC
+dlt.create_streaming_table("products_scd2")
+dlt.create_auto_cdc_flow(
+    target="products_scd2",
+    source="bronze_products_scd2_source",
+    keys=["product_id"],
+    sequence_by="_ingestion_timestamp",
+    stored_as_scd_type="2"
+)
+```
+
+## 🎯 Benefits
+
+- **Simplified Management**: Single pipeline per business domain
+- **Consistent Scheduling**: Uniform timing across bronze and silver operations
+- **Audit Compliance**: Complete data lineage and change tracking
+- **Performance**: Optimized DLT pipelines with proper metadata handling
+- **Maintainability**: Configuration-driven approach with generated code
+- **Unity Catalog Ready**: Full compatibility with modern Databricks features
+
+## 🔍 Monitoring
+
+- **Pipeline Metrics**: Track upserted and deleted rows
+- **CDF Queries**: Query change history using Delta Lake change data feed
+- **Audit Trail**: File-level metadata for data lineage
+- **Error Handling**: Comprehensive error reporting and notifications
+
+## 📚 Additional Resources
+
+- [Delta Live Tables Documentation](https://docs.databricks.com/data-engineering/delta-live-tables/)
+- [Auto Loader Options](https://docs.databricks.com/ingestion/auto-loader/options.html)
+- [Change Data Capture with DLT](https://docs.databricks.com/dlt/cdc)
+- [Unity Catalog Best Practices](https://docs.databricks.com/data-governance/unity-catalog/)
 
 ## 🤝 Contributing
 
-See [DEVELOPER.md](docs/DEVELOPER.md) for guidelines on extending the framework.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## 📄 License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the LICENSE file for details.

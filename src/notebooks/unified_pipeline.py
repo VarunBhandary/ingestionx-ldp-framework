@@ -19,18 +19,7 @@ from pyspark.sql.types import *
 operations_config = json.loads(spark.conf.get("operations_config", "{}"))
 pipeline_group = spark.conf.get("pipeline_group", "default")
 
-print(f"🚀 Starting Unified Pipeline")
-print(f"📋 Pipeline Group: {pipeline_group}")
-print(f"⚙️  Operations Configuration: {operations_config}")
-
 # COMMAND ----------
-
-# Create all streaming tables upfront
-print("📊 Creating streaming tables for all operations...")
-
-# Bronze layer tables
-bronze_tables = {}
-silver_tables = {}
 
 # Extract bronze and silver operations
 bronze_operations = []
@@ -42,134 +31,233 @@ for operation_name, operation_config in operations_config.items():
     elif operation_name.startswith("silver_"):
         silver_operations.append((operation_name, operation_config))
 
-print(f"  📥 Found {len(bronze_operations)} bronze operations")
-print(f"  🔄 Found {len(silver_operations)} silver operations")
-
 # COMMAND ----------
 
 # BRONZE LAYER - File Ingestion with Autoloader
-print("📥 Processing Bronze Layer Operations...")
 
+# Create streaming tables for all bronze operations
 for op_name, op_config in bronze_operations:
-    try:
-        # Extract configuration
-        source_path = op_config.get("source_path", "")
-        target_table = op_config.get("target_table", "")
-        file_format = op_config.get("file_format", "csv")
+    table_name = op_config.get("target_table", "").split('.')[-1] if '.' in op_config.get("target_table", "") else op_config.get("target_table", "")
+    dlt.create_streaming_table(table_name)
+
+# COMMAND ----------
+
+# BRONZE TABLE: Products
+if any(op[0] == "bronze_product" for op in bronze_operations):
+    @dlt.table(
+        name="products_new",
+        table_properties={
+            "quality": "bronze",
+            "operation": "bronze_product",
+            "pipelines.autoOptimize.optimizeWrite": "true",
+            "pipelines.autoOptimize.autoCompact": "true"
+        }
+    )
+    def bronze_products():
+        # Get config for bronze_product
+        op_config = next(op[1] for op in bronze_operations if op[0] == "bronze_product")
         
-        # Extract autoloader options
-        schema_location = op_config.get("schema_location", "")
-        checkpoint_location = op_config.get("checkpoint_location", "")
+        # Build autoloader options
+        autoloader_options = {
+            "cloudFiles.schemaLocation": op_config.get("schema_location", ""),
+            "cloudFiles.checkpointLocation": op_config.get("checkpoint_location", ""),
+            "cloudFiles.maxFilesPerTrigger": op_config.get("cloudFiles.maxFilesPerTrigger", "100"),
+            "cloudFiles.allowOverwrites": op_config.get("cloudFiles.allowOverwrites", "false"),
+            "header": op_config.get("header", "true"),
+            "inferSchema": "true"
+        }
         
-        # Get table name for the target
-        table_name = target_table.split('.')[-1] if '.' in target_table else target_table
+        # Read from source using autoloader
+        return (spark.readStream
+                .format("cloudFiles")
+                .options(**autoloader_options)
+                .option("cloudFiles.format", "csv")
+                .load(op_config.get("source_path", "")))
+
+# COMMAND ----------
+
+# BRONZE TABLE: Orders
+if any(op[0] == "bronze_order" for op in bronze_operations):
+    @dlt.table(
+        name="orders_new",
+        table_properties={
+            "quality": "bronze",
+            "operation": "bronze_order",
+            "pipelines.autoOptimize.optimizeWrite": "true",
+            "pipelines.autoOptimize.autoCompact": "true"
+        }
+    )
+    def bronze_orders():
+        # Get config for bronze_order
+        op_config = next(op[1] for op in bronze_operations if op[0] == "bronze_order")
         
-        print(f"  📁 Processing {op_name}: {source_path} -> {target_table}")
+        # Build autoloader options
+        autoloader_options = {
+            "cloudFiles.schemaLocation": op_config.get("schema_location", ""),
+            "cloudFiles.checkpointLocation": op_config.get("checkpoint_location", ""),
+            "cloudFiles.maxFilesPerTrigger": op_config.get("cloudFiles.maxFilesPerTrigger", "50"),
+            "cloudFiles.allowOverwrites": op_config.get("cloudFiles.allowOverwrites", "false"),
+            "multiline": "true"
+        }
         
-        # Create the streaming table
-        dlt.create_streaming_table(table_name)
+        # Read from source using autoloader
+        return (spark.readStream
+                .format("cloudFiles")
+                .options(**autoloader_options)
+                .option("cloudFiles.format", "json")
+                .load(op_config.get("source_path", "")))
+
+# COMMAND ----------
+
+# BRONZE TABLE: Order Items
+if any(op[0] == "bronze_order_items" for op in bronze_operations):
+    @dlt.table(
+        name="order_items_new",
+        table_properties={
+            "quality": "bronze",
+            "operation": "bronze_order_items",
+            "pipelines.autoOptimize.optimizeWrite": "true",
+            "pipelines.autoOptimize.autoCompact": "true"
+        }
+    )
+    def bronze_order_items():
+        # Get config for bronze_order_items
+        op_config = next(op[1] for op in bronze_operations if op[0] == "bronze_order_items")
         
-        # Create the streaming live table with autoloader
-        @dlt.table(
-            name=table_name,
-            table_properties={
-                "quality": "bronze",
-                "operation": op_name,
-                "pipelines.autoOptimize.optimizeWrite": "true",
-                "pipelines.autoOptimize.autoCompact": "true"
-            }
-        )
-        def bronze_table():
-            # Build autoloader options
-            autoloader_options = {
-                "cloudFiles.schemaLocation": schema_location,
-                "cloudFiles.checkpointLocation": checkpoint_location
-            }
-            
-            # Add format-specific options
-            if file_format.lower() == "csv":
-                autoloader_options.update({
-                    "header": op_config.get("header", "true"),
-                    "inferSchema": "true"
-                })
-            elif file_format.lower() == "json":
-                autoloader_options.update({
-                    "multiline": "true"
-                })
-            
-            # Add other autoloader options from config
-            for key, value in op_config.items():
-                if key.startswith("cloudFiles.") or key in ["maxFilesPerTrigger", "allowOverwrites"]:
-                    autoloader_options[key] = value
-            
-            print(f"    🔧 Autoloader Options for {op_name}: {autoloader_options}")
-            
-            # Read from source using autoloader
-            return (spark.readStream
-                    .format("cloudFiles")
-                    .options(**autoloader_options)
-                    .option("cloudFiles.format", file_format)
-                    .load(source_path))
+        # Build autoloader options
+        autoloader_options = {
+            "cloudFiles.schemaLocation": op_config.get("schema_location", ""),
+            "cloudFiles.checkpointLocation": op_config.get("checkpoint_location", ""),
+            "cloudFiles.maxFilesPerTrigger": op_config.get("cloudFiles.maxFilesPerTrigger", "50"),
+            "cloudFiles.allowOverwrites": op_config.get("cloudFiles.allowOverwrites", "false"),
+            "multiline": "true"
+        }
         
-        bronze_tables[op_name] = table_name
-        print(f"    ✅ Created bronze table: {table_name}")
+        # Read from source using autoloader
+        return (spark.readStream
+                .option("cloudFiles.format", "json")
+                .options(**autoloader_options)
+                .load(op_config.get("source_path", "")))
+
+# COMMAND ----------
+
+# BRONZE TABLE: Customers
+if any(op[0] == "bronze_customer" for op in bronze_operations):
+    @dlt.table(
+        name="customers_new",
+        table_properties={
+            "quality": "bronze",
+            "operation": "bronze_customer",
+            "pipelines.autoOptimize.optimizeWrite": "true",
+            "pipelines.autoOptimize.autoCompact": "true"
+        }
+    )
+    def bronze_customers():
+        # Get config for bronze_customer
+        op_config = next(op[1] for op in bronze_operations if op[0] == "bronze_customer")
         
-    except Exception as e:
-        print(f"    ❌ Error processing bronze operation {op_name}: {e}")
-        continue
+        # Build autoloader options
+        autoloader_options = {
+            "cloudFiles.schemaLocation": op_config.get("schema_location", ""),
+            "cloudFiles.checkpointLocation": op_config.get("checkpoint_location", ""),
+            "cloudFiles.maxFilesPerTrigger": op_config.get("cloudFiles.maxFilesPerTrigger", "100"),
+            "cloudFiles.allowOverwrites": op_config.get("cloudFiles.allowOverwrites", "false"),
+            "header": op_config.get("header", "true"),
+            "inferSchema": "true"
+        }
+        
+        # Read from source using autoloader
+        return (spark.readStream
+                .format("cloudFiles")
+                .options(**autoloader_options)
+                .option("cloudFiles.format", "csv")
+                .load(op_config.get("source_path", "")))
 
 # COMMAND ----------
 
 # SILVER LAYER - SCD Type 2 with Auto CDC
-print("🔄 Processing Silver Layer Operations...")
 
+# Create streaming tables for all silver operations
 for op_name, op_config in silver_operations:
-    try:
-        # Extract configuration
-        bronze_table = op_config.get("bronze_table", "")
-        target_table = op_config.get("target_table", "")
-        
-        # Extract Auto CDC configuration
-        keys = op_config.get("keys", [])
-        except_column_list = op_config.get("track_history_except_column_list", [])
-        stored_as_scd_type = op_config.get("stored_as_scd_type", "2")
-        sequence_by = op_config.get("sequence_by", "_ingestion_timestamp")
-        
-        # Get table name for the target
-        table_name = target_table.split('.')[-1] if '.' in target_table else target_table
-        
-        print(f"  🔄 Processing {op_name}: {bronze_table} -> {target_table}")
-        
-        # Create the target streaming table
-        dlt.create_streaming_table(table_name)
-        
-        # Create source view from bronze table
-        @dlt.view
-        def bronze_source_view():
-            return spark.readStream.table(bronze_table)
-        
-        # Create Auto CDC flow for SCD Type 2
-        dlt.create_auto_cdc_flow(
-            target=table_name,
-            source="bronze_source_view",
-            keys=keys,
-            sequence_by=sequence_by,
-            apply_as_deletes=expr("operation = 'DELETE'"),
-            except_column_list=except_column_list,
-            stored_as_scd_type=stored_as_scd_type
-        )
-        
-        silver_tables[op_name] = table_name
-        print(f"    ✅ Created silver table: {table_name}")
-        
-    except Exception as e:
-        print(f"    ❌ Error processing silver operation {op_name}: {e}")
-        continue
+    table_name = op_config.get("target_table", "").split('.')[-1] if '.' in op_config.get("target_table", "") else op_config.get("target_table", "")
+    dlt.create_streaming_table(table_name)
 
 # COMMAND ----------
 
-print(f"✅ Unified Pipeline completed successfully!")
-print(f"📋 Pipeline Group: {pipeline_group}")
-print(f"📊 Bronze Tables Created: {list(bronze_tables.values())}")
-print(f"🔄 Silver Tables Created: {list(silver_tables.values())}")
-print(f"🎯 Total Operations: {len(bronze_operations) + len(silver_operations)}")
+# SILVER TABLE: Products SCD Type 2
+if any(op[0] == "silver_product" for op in silver_operations):
+    @dlt.view
+    def bronze_products_source():
+        return spark.readStream.table("products_new")
+    
+    dlt.create_auto_cdc_flow(
+        target="products_scd2",
+        target_table_name="products_scd2",
+        source="bronze_products_source",
+        keys=["product_id"],
+        sequence_by="_ingestion_timestamp",
+        apply_as_deletes=expr("operation = 'DELETE'"),
+        except_column_list=["product_name", "category", "price", "brand", "description", "stock_quantity"],
+        stored_as_scd_type="2"
+    )
+
+# COMMAND ----------
+
+# SILVER TABLE: Orders SCD Type 2
+if any(op[0] == "silver_order" for op in silver_operations):
+    @dlt.view
+    def bronze_orders_source():
+        return spark.readStream.table("orders_new")
+    
+    dlt.create_auto_cdc_flow(
+        target="orders_scd2",
+        target_table_name="orders_scd2",
+        source="bronze_orders_source",
+        keys=["order_id"],
+        sequence_by="_ingestion_timestamp",
+        apply_as_deletes=expr("operation = 'DELETE'"),
+        except_column_list=["order_status", "total_amount", "shipping_address"],
+        stored_as_scd_type="2"
+    )
+
+# COMMAND ----------
+
+# SILVER TABLE: Order Items SCD Type 2
+if any(op[0] == "silver_order_items" for op in silver_operations):
+    @dlt.view
+    def bronze_order_items_source():
+        return spark.readStream.table("order_items_new")
+    
+    dlt.create_auto_cdc_flow(
+        target="order_items_scd2",
+        target_table_name="order_items_scd2",
+        source="bronze_order_items_source",
+        keys=["order_item_id"],
+        sequence_by="_ingestion_timestamp",
+        apply_as_deletes=expr("operation = 'DELETE'"),
+        except_column_list=["quantity", "unit_price", "discount"],
+        stored_as_scd_type="2"
+    )
+
+# COMMAND ----------
+
+# SILVER TABLE: Customers SCD Type 2
+if any(op[0] == "silver_customer" for op in silver_operations):
+    @dlt.view
+    def bronze_customers_source():
+        return spark.readStream.table("customers_new")
+    
+    dlt.create_auto_cdc_flow(
+        target="customers_scd2",
+        target_table_name="customers_scd2",
+        source="bronze_customers_source",
+        keys=["customer_id"],
+        sequence_by="_ingestion_timestamp",
+        apply_as_deletes=expr("operation = 'DELETE'"),
+        except_column_list=["name", "email", "phone", "address", "status"],
+        stored_as_scd_type="2"
+    )
+
+# COMMAND ----------
+
+# Pipeline execution completed

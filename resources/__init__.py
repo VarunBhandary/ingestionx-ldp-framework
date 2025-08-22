@@ -11,6 +11,6 @@ def load_resources(bundle: Bundle) -> Resources:
     bundle deployment. After deployment, this function is not used.
     """
 
-    # Import and use our custom autoloader job generator
-    from .autoloader_jobs import load_resources as load_autoloader_resources
-    return load_autoloader_resources(bundle) 
+    # Import and use our unified pipeline generator
+    from .unified_pipeline_generator import load_resources as load_unified_pipeline_resources
+    return load_unified_pipeline_resources(bundle) 

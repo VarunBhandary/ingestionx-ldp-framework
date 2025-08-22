@@ -13,8 +13,8 @@ experimental:
     venv_path: .venv
     # Functions called to load resources defined in Python
     resources:
-      - 'resources:unified_pipeline_generator:load_resources'
-    # Job mutators to modify jobs during deployment
-    mutators:
-      - 'mutators:add_email_notifications'
-      - 'mutators:add_default_cluster_config' 
+      - 'resources.unified_pipeline_generator:load_resources'
+    # No mutators needed for pipelines - they are self-contained
+    # mutators:
+    #   - 'mutators:add_email_notifications'
+    #   - 'mutators:add_default_cluster_config' 

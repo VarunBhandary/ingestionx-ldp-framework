@@ -61,13 +61,13 @@ The unified configuration table contains all necessary information:
 
 ## 🚀 Key Benefits
 
-### 1. **Simplified Configuration**
+### 1. **Flexible Configuration**
 - Single TSV file for all pipeline configurations
-- No need to maintain separate bronze/silver configs
-- Consistent structure across all pipeline types
+- Each row represents a single operation (bronze or silver)
+- Users can choose which operations to implement
 
 ### 2. **Automatic Grouping**
-- Related bronze and silver operations are automatically grouped
+- Related operations are automatically grouped by pipeline_group
 - Efficient resource utilization
 - Single pipeline per logical group
 
@@ -80,6 +80,28 @@ The unified configuration table contains all necessary information:
 - Serverless and traditional cluster support
 - Automatic schedule parsing
 - Email notification integration
+
+## 🎯 Flexibility Options
+
+### **Bronze + Silver (Full Pipeline)**
+- Implement both ingestion and transformation
+- Automatic coordination between operations
+- Single pipeline handles the complete data flow
+
+### **Bronze Only (Ingestion Only)**
+- Implement only file ingestion
+- Useful when you don't need SCD Type 2 tracking
+- Can add silver operations later by adding new rows
+
+### **Silver Only (Transformation Only)**
+- Implement only SCD Type 2 transformation
+- Useful when bronze tables already exist
+- Can process data from existing ingestion pipelines
+
+### **Mixed Groups**
+- Different pipeline groups can have different operation mixes
+- Some groups can be bronze+silver, others bronze-only, etc.
+- Maximum flexibility for different use cases
 
 ## 📁 File Structure
 
@@ -114,6 +136,22 @@ silver	order_pipeline		vbdemos.adls_bronze.orders_new	vbdemos.adls_silver.orders
 ```
 
 **Result**: Creates `unified_order_pipeline` for order data processing.
+
+### Example 3: Bronze Only Pipeline
+```tsv
+pipeline_type	pipeline_group	source_type	source_path	target_table	file_format	trigger_type	schedule	pipeline_config	cluster_size	cluster_config	email_notifications
+bronze	products_only	adls	abfss://.../products/	vbdemos.adls_bronze.products_new	csv	file	0 */15 * * *	{"schema_location": "...", "checkpoint_location": "..."}	medium		{"email_on_success": "true", "email_on_failure": "true", "recipients": ["admin@company.com"]}
+```
+
+**Result**: Creates `unified_products_only` pipeline that handles only file ingestion.
+
+### Example 4: Silver Only Pipeline (from existing bronze table)
+```tsv
+pipeline_type	pipeline_group	source_type	source_path	target_table	file_format	trigger_type	schedule	pipeline_config	cluster_size	cluster_config	email_notifications
+silver	transform_only		vbdemos.adls_bronze.existing_table	vbdemos.adls_silver.transformed_table		time	0 */20 * * *	{"keys": ["id"], "track_history_except_column_list": ["name", "status"]}	medium		{"email_on_success": "true", "email_on_failure": "true", "recipients": ["admin@company.com"]}
+```
+
+**Result**: Creates `unified_transform_only` pipeline that handles only SCD Type 2 transformation from an existing bronze table.
 
 ## 🚀 Deployment
 
