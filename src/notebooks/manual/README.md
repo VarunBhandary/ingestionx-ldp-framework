@@ -35,12 +35,162 @@ Each notebook receives these parameters from the framework:
 - `operation_index`: The step number (0-based)
 - `total_operations`: Total number of steps in the pipeline
 
+## Compute Selection Guide
+
+The framework supports multiple compute options to match your performance and cost requirements:
+
+### 🚀 **Serverless (Recommended for Most Use Cases)**
+**Configuration:** `cluster_size: serverless`
+
+**When to Use:**
+- **Best performance** - Databricks automatically optimizes compute resources
+- **Production workloads** - Critical jobs requiring maximum performance
+- **Variable workloads** - Jobs with unpredictable resource requirements
+- **Cost optimization** - Pay only for actual compute time used
+- **Quick startup** - No cluster provisioning delays
+
+**Benefits:**
+- Automatic scaling based on workload demands
+- No cluster management overhead
+- Optimal performance for most workloads
+- Cost-effective for variable workloads
+
+**Example Use Cases:**
+- Data processing pipelines
+- Analytics jobs
+- ETL operations
+- Real-time data processing
+
+### 🔧 **Small Cluster**
+**Configuration:** `cluster_size: small`
+
+**When to Use:**
+- **Non-critical jobs** - Jobs where SLA is flexible
+- **Development/testing** - Prototyping and experimentation
+- **Light workloads** - Simple data transformations
+- **Cost-sensitive** - When budget is a primary concern
+- **Predictable workloads** - Jobs with consistent resource needs
+
+**Specifications:**
+- Node type: Standard_D2s_v5
+- Max workers: 2
+- Memory: ~8 GB per node
+- CPU: 2 vCPUs per node
+
+**Example Use Cases:**
+- Data validation jobs
+- Simple reporting
+- Development testing
+- Non-critical data processing
+
+### ⚖️ **Medium Cluster**
+**Configuration:** `cluster_size: medium`
+
+**When to Use:**
+- **Balanced workloads** - Jobs requiring moderate resources
+- **Standard processing** - Typical ETL and analytics jobs
+- **Mixed workloads** - Jobs with varying complexity
+- **Cost-performance balance** - Good performance without premium cost
+- **Team development** - Shared development environments
+
+**Specifications:**
+- Node type: Standard_D4s_v5
+- Max workers: 3
+- Memory: ~16 GB per node
+- CPU: 4 vCPUs per node
+
+**Example Use Cases:**
+- Standard ETL pipelines
+- Data quality checks
+- Medium-scale analytics
+- Team development work
+
+### 🚀 **Large Cluster**
+**Configuration:** `cluster_size: large`
+
+**When to Use:**
+- **Heavy workloads** - Jobs requiring significant resources
+- **Complex processing** - Advanced analytics and ML workloads
+- **High throughput** - Jobs processing large volumes of data
+- **Performance critical** - When speed is essential
+- **Resource-intensive** - Jobs with high memory/CPU requirements
+
+**Specifications:**
+- Node type: Standard_D8s_v5
+- Max workers: 5
+- Memory: ~32 GB per node
+- CPU: 8 vCPUs per node
+
+**Example Use Cases:**
+- Large-scale data processing
+- Machine learning workloads
+- Complex analytics
+- High-throughput ETL
+
+## Compute Selection Decision Matrix
+
+| Factor | Serverless | Small | Medium | Large |
+|--------|------------|-------|--------|-------|
+| **Performance Priority** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Cost Priority** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| **SLA Criticality** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Workload Predictability** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| **Setup Speed** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| **Resource Control** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+
+## Configuration Examples
+
+### High-Performance Production Job
+```tsv
+manual	production_pipeline	notebook		src/notebooks/manual/production_step.py	output_table	time	0 0 6 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/production_step.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+```
+
+### Cost-Optimized Development Job
+```tsv
+manual	dev_pipeline	notebook		src/notebooks/manual/dev_step.py	dev_table	time	0 0 10 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/dev_step.py"}	small	{"on_success": false, "on_failure": true, "recipients": ["dev-team@company.com"]}
+```
+
+### Balanced Workload Job
+```tsv
+manual	balanced_pipeline	notebook		src/notebooks/manual/balanced_step.py	balanced_table	time	0 0 8 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/balanced_step.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["data-team@company.com"]}
+```
+
+### High-Throughput Processing Job
+```tsv
+manual	throughput_pipeline	notebook		src/notebooks/manual/throughput_step.py	throughput_table	time	0 0 */4 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/throughput_step.py"}	large	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}
+```
+
+## Best Practices
+
+### 1. **Start with Serverless**
+- Use serverless for new jobs unless you have specific requirements
+- Let Databricks optimize performance automatically
+- Monitor costs and adjust if needed
+
+### 2. **Right-Size Based on Workload**
+- **Small**: Simple transformations, validation, testing
+- **Medium**: Standard ETL, moderate analytics
+- **Large**: Complex processing, ML workloads, high throughput
+- **Serverless**: Variable workloads, production, performance-critical
+
+### 3. **Consider SLA Requirements**
+- **Critical SLA**: Use serverless or large clusters
+- **Flexible SLA**: Small or medium clusters are fine
+- **Development**: Small clusters for cost optimization
+
+### 4. **Monitor and Optimize**
+- Track job execution times
+- Monitor resource utilization
+- Adjust cluster sizes based on performance data
+- Consider cost vs. performance trade-offs
+
 ## Usage
 
 1. **Create your notebooks** in this folder or any location
-2. **Add configuration** to `config/unified_pipeline_config.tsv`
-3. **Deploy** using `databricks bundle deploy --profile dev`
-4. **Run manually** using `databricks bundle run <job_name> --profile dev`
+2. **Choose appropriate cluster size** based on your requirements
+3. **Add configuration** to `config/unified_pipeline_config.tsv`
+4. **Deploy** using `databricks bundle deploy --profile dev`
+5. **Run manually** using `databricks bundle run <job_name> --profile dev`
 
 ## Benefits
 
@@ -49,3 +199,6 @@ Each notebook receives these parameters from the framework:
 - **Flexible chaining**: Any number of steps, any execution order
 - **Framework integration**: Leverage scheduling, notifications, cluster config
 - **Seamless coexistence**: Works alongside existing DLT pipelines
+- **Compute flexibility**: Choose the right compute for your workload
+- **Cost optimization**: Balance performance and cost requirements
+- **Performance tuning**: Optimize based on your specific needs
