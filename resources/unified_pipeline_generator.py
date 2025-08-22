@@ -153,6 +153,100 @@ class UnifiedPipelineGenerator:
         
         return pipeline
 
+    def create_manual_job(self, pipeline_group: str, group_rows: List[dict]) -> Job:
+        """Create a manual job with notebook tasks based on TSV configuration."""
+        
+        print(f"   🔧 Creating manual job for group: {pipeline_group}")
+        
+        # Get the Quartz cron schedule directly from the TSV config
+        cron_schedule = self._get_quartz_cron_for_group(pipeline_group, group_rows)
+        
+        # Get notification configuration from the first manual operation
+        notification_config = self._get_notification_config_for_group(pipeline_group, group_rows)
+        
+        # Get all manual operations and sort them by order if specified
+        manual_operations = [row for row in group_rows if row.get('operation_type') == 'manual']
+        
+        # Sort by order if specified in pipeline_config, otherwise maintain TSV order
+        for op in manual_operations:
+            try:
+                pipeline_config = json.loads(op.get('pipeline_config', '{}'))
+                op['_order'] = pipeline_config.get('order', 0)
+            except (json.JSONDecodeError, TypeError):
+                op['_order'] = 0
+        
+        manual_operations.sort(key=lambda x: x['_order'])
+        
+        # Create tasks list for manual operations
+        tasks = []
+        previous_task_key = None
+        
+        for i, manual_op in enumerate(manual_operations):
+            notebook_path = manual_op.get('source_path', '')
+            if not notebook_path:
+                print(f"      ⚠️  Skipping manual operation {i}: no notebook path specified")
+                continue
+            
+            # Create notebook task
+            task_key = f"manual_notebook_{pipeline_group}_{i}"
+            task = Task(
+                task_key=task_key,
+                notebook_task=NotebookTask(
+                    notebook_path=notebook_path,
+                    base_parameters={
+                        "pipeline_group": pipeline_group,
+                        "operation_type": "manual",
+                        "operation_index": i,
+                        "total_operations": len(manual_operations)
+                    }
+                ),
+                run_if="ALL_SUCCESS"
+            )
+            
+            # Add dependency if this is not the first task
+            if previous_task_key:
+                task.depends_on = [{"task_key": previous_task_key}]
+                print(f"      🔗 Added manual notebook task: {notebook_path} (depends on {previous_task_key})")
+            else:
+                print(f"      🚀 Added manual notebook task: {notebook_path} (first task)")
+            
+            tasks.append(task)
+            previous_task_key = task_key
+        
+        if not tasks:
+            print(f"      ❌ No valid manual operations found for {pipeline_group}")
+            return None
+        
+        # Create the job with all tasks
+        job = Job(
+            name=f"manual_{pipeline_group}_job",
+            tasks=tasks,
+            schedule=CronSchedule(
+                quartz_cron_expression=cron_schedule,
+                timezone_id="UTC"
+            ),
+            max_concurrent_runs=1,
+            tags={
+                "deployment_type": "manual_framework",
+                "pipeline_group": pipeline_group,
+                "framework": "unified-autoloader-pydab",
+                "scheduling": "cron_based"
+            }
+        )
+        
+        # Apply notification configuration if specified
+        if notification_config:
+            job.email_notifications = notification_config
+            print(f"      📧 Applied notifications: {notification_config}")
+        
+        print(f"      ⏰ Applied cron schedule: {cron_schedule}")
+        print(f"      🎯 Job will run {len(tasks)} manual notebook tasks")
+        
+        # Set the resource name for the job
+        job.resource_name = f"manual_{pipeline_group}_job"
+        
+        return job
+
     def create_scheduled_job(self, pipeline_group: str, pipeline: Pipeline, group_rows: List[dict]) -> Job:
         """Create a scheduled job that runs the pipeline based on TSV cron configuration."""
         
@@ -229,9 +323,17 @@ class UnifiedPipelineGenerator:
     def _get_quartz_cron_for_group(self, pipeline_group: str, group_rows: List[dict]) -> str:
         """Get the Quartz cron schedule directly from the TSV config for a pipeline group."""
         
-        # Look for the silver operation to get the schedule
+        # Look for the silver operation to get the schedule (for DLT pipelines)
         for row in group_rows:
             if row.get('operation_type') == 'silver':
+                schedule = row.get('schedule', '')
+                if schedule and pd.notna(schedule):
+                    print(f"      📅 Found Quartz cron schedule: '{schedule}'")
+                    return schedule
+        
+        # Look for manual operations to get the schedule
+        for row in group_rows:
+            if row.get('operation_type') == 'manual':
                 schedule = row.get('schedule', '')
                 if schedule and pd.notna(schedule):
                     print(f"      📅 Found Quartz cron schedule: '{schedule}'")
@@ -245,9 +347,31 @@ class UnifiedPipelineGenerator:
     def _get_notification_config_for_group(self, pipeline_group: str, group_rows: List[dict]) -> JobEmailNotifications:
         """Get notification configuration from the TSV config for a pipeline group."""
         
-        # Look for the silver operation to get the notification config
+        # Look for the silver operation to get the notification config (for DLT pipelines)
         for row in group_rows:
             if row.get('operation_type') == 'silver':
+                notifications = row.get('notifications', '')
+                if notifications and pd.notna(notifications):
+                    try:
+                        notification_data = json.loads(notifications)
+                        print(f"      📧 Found notification config: {notification_data}")
+                        
+                        # Create JobEmailNotifications object
+                        recipients = notification_data.get('recipients', [])
+                        email_notifications = JobEmailNotifications(
+                            on_success=recipients if notification_data.get('on_success', False) else [],
+                            on_failure=recipients if notification_data.get('on_failure', True) else []
+                        )
+                        
+                        return email_notifications
+                        
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"      ⚠️  Error parsing notification config: {e}")
+                        break
+        
+        # Look for manual operations to get the notification config
+        for row in group_rows:
+            if row.get('operation_type') == 'manual':
                 notifications = row.get('notifications', '')
                 if notifications and pd.notna(notifications):
                     try:
@@ -454,13 +578,25 @@ class UnifiedPipelineGenerator:
         
         print(f"\n📊 Found {len(pipeline_groups)} pipeline groups:")
         
-        # First pass: Create all pipelines
+        # First pass: Create all pipelines (only for non-manual groups)
         pipeline_map = {}  # Map pipeline_group -> pipeline object
+        manual_groups = []  # List of manual pipeline groups
+        
         for group_name, group_df in pipeline_groups:
             print(f"  📁 {group_name}: {len(group_df)} operations")
             
+            # Check if this is a manual-only group
+            group_operations = group_df.to_dict('records')
+            operation_types = [op.get('operation_type') for op in group_operations]
+            
+            if all(op_type == 'manual' for op_type in operation_types):
+                # This is a manual-only group - no pipeline needed
+                print(f"  🔧 {group_name}: Manual-only group (no DLT pipeline)")
+                manual_groups.append(group_name)
+                continue
+            
             try:
-                pipeline = self.create_unified_pipeline(group_name, group_df.to_dict('records'))
+                pipeline = self.create_unified_pipeline(group_name, group_operations)
                 pipelines.append(pipeline)
                 pipeline_map[group_name] = pipeline
                 print(f"  ✅ Created unified pipeline: {pipeline.name}")
@@ -469,8 +605,8 @@ class UnifiedPipelineGenerator:
                 print(f"  ❌ Error creating pipeline for {group_name}: {e}")
                 continue
         
-        # Second pass: Create jobs that reference the actual pipelines
-        print(f"\n🔧 Creating scheduled jobs for {len(pipeline_map)} pipelines...")
+        # Second pass: Create jobs for DLT pipelines
+        print(f"\n🔧 Creating scheduled jobs for {len(pipeline_map)} DLT pipelines...")
         for group_name, pipeline in pipeline_map.items():
             try:
                 # Create scheduled job for this pipeline
@@ -480,6 +616,23 @@ class UnifiedPipelineGenerator:
                 
             except Exception as e:
                 print(f"  ❌ Error creating job for {group_name}: {e}")
+                continue
+        
+        # Third pass: Create manual jobs
+        print(f"\n🔧 Creating manual jobs for {len(manual_groups)} manual groups...")
+        for group_name in manual_groups:
+            try:
+                # Create manual job for this group
+                group_rows = df[df['pipeline_group'] == group_name].to_dict('records')
+                job = self.create_manual_job(group_name, group_rows)
+                if job:
+                    jobs.append(job)
+                    print(f"  ✅ Created manual job: {job.name}")
+                else:
+                    print(f"  ⚠️  No valid manual job created for {group_name}")
+                
+            except Exception as e:
+                print(f"  ❌ Error creating manual job for {group_name}: {e}")
                 continue
         
         print(f"\n✅ Generated {len(pipelines)} unified pipelines and {len(jobs)} scheduled jobs")
