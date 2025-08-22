@@ -122,9 +122,15 @@ The framework uses **Quartz cron syntax** for precise scheduling:
 
 Edit `config/unified_pipeline_config.tsv` to define your pipeline groups:
 
+#### Unified Pipeline (Bronze + Silver)
 ```tsv
 bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "abfss://...", "cloudFiles.checkpointLocation": "abfss://..."}	serverless	{"email_on_success": "true"}
 silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	serverless	{"email_on_success": "true"}
+```
+
+#### Silver-Only Pipeline (Existing Bronze Table)
+```tsv
+silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"email_on_success": "true"}
 ```
 
 ### 2. Generate Notebooks
@@ -182,6 +188,37 @@ dlt.create_auto_cdc_flow(
 )
 ```
 
+## 🔄 Silver-Only Pipeline Support
+
+The framework supports creating **silver-only pipelines** for existing bronze tables, making it perfect for:
+
+- **Legacy Data Migration**: Transform existing bronze tables to SCD2
+- **External ETL Integration**: Use tables created by other tools or frameworks
+- **Incremental Adoption**: Start with silver-only, add bronze operations later
+- **Hybrid Approach**: Mix framework-created and external bronze tables
+
+### Silver-Only Configuration Example
+
+```tsv
+# Silver-only pipeline for existing bronze table
+silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"email_on_success": "true"}
+```
+
+### How It Works
+
+1. **Existing Bronze Tables**: Your bronze tables can be created by any process (external ETL, manual creation, other frameworks)
+2. **Silver Pipeline Only**: Configure just the `silver` operation in the TSV
+3. **Source Reference**: Point `source_path` to your existing bronze table
+4. **Auto CDC**: The framework creates SCD2 tables using Auto CDC from existing bronze tables
+5. **Scheduling**: Runs on your specified cron schedule with proper resource management
+
+### Key Benefits
+
+- **Flexibility**: Works with any bronze table source
+- **No Duplication**: Don't recreate bronze tables you already have
+- **Incremental**: Can add bronze operations later if needed
+- **Consistent**: Same SCD2 logic and scheduling across all pipelines
+
 ## 🎯 Benefits
 
 - **Simplified Management**: Single pipeline per business domain
@@ -191,6 +228,7 @@ dlt.create_auto_cdc_flow(
 - **Maintainability**: Configuration-driven approach with generated code
 - **Unity Catalog Ready**: Full compatibility with modern Databricks features
 - **Automated Scheduling**: Cron-based jobs with proper resource references
+- **Flexible Architecture**: Support for silver-only pipelines from existing bronze tables
 
 ## 🔍 Monitoring
 

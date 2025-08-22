@@ -45,6 +45,108 @@ graph TD
 - `generate_bronze_table_notebook()`: Generates bronze ingestion logic
 - `generate_silver_table_notebook()`: Generates silver SCD2 transformation logic
 
+### 2. Resource Generator (`resources/unified_pipeline_generator.py`)
+
+**Purpose**: Generates Databricks resources (pipelines, jobs) from configuration.
+
+**Key Classes**:
+- `UnifiedPipelineGenerator`: Main resource generation logic
+- `Pipeline`: DLT pipeline definitions
+- `Job`: Scheduled job definitions with pipeline tasks
+
+**Key Methods**:
+- `generate_resources()`: Main entry point
+- `create_unified_pipeline()`: DLT pipeline creation
+- `create_scheduled_job()`: Scheduled job creation with cron schedules
+
+### 3. Configuration Management
+
+**TSV Configuration Schema**:
+```python
+# Add new configuration columns
+def validate_custom_column(self, df: pd.DataFrame) -> List[str]:
+    errors = []
+    if 'custom_field' in df.columns:
+        # Validate custom field logic
+        pass
+    return errors
+
+# Add new pipeline configuration options
+def parse_custom_pipeline_config(self, config_json: str) -> dict:
+    """Parse custom pipeline configuration options."""
+    try:
+        config = json.loads(config_json)
+        # Add custom parsing logic
+        return config
+    except json.JSONDecodeError:
+        return {}
+```
+
+## 🔄 Silver-Only Pipeline Support
+
+The framework is designed to support **silver-only pipelines** for existing bronze tables, providing flexibility for various deployment scenarios.
+
+### Use Cases
+
+- **Legacy Data Migration**: Transform existing bronze tables to SCD2
+- **External ETL Integration**: Use tables created by other tools or frameworks
+- **Incremental Adoption**: Start with silver-only, add bronze operations later
+- **Hybrid Approach**: Mix framework-created and external bronze tables
+
+### Implementation Details
+
+#### Configuration
+```tsv
+# Silver-only pipeline configuration
+silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"email_on_success": "true"}
+```
+
+#### Resource Generation
+The framework automatically detects pipeline groups with only silver operations and creates appropriate resources:
+
+```python
+def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
+    """Create pipeline for pipeline group (bronze + silver or silver-only)."""
+    
+    # Check if this is a silver-only pipeline group
+    silver_only = all(row.get('operation_type') == 'silver' for row in group_rows)
+    
+    if silver_only:
+        print(f"   🔄 Creating silver-only pipeline for: {pipeline_group}")
+        # Generate silver-only notebook
+        notebook_path = f"src/notebooks/generated/unified_{pipeline_group}.py"
+        # ... silver-only logic
+    else:
+        print(f"   🔄 Creating unified pipeline for: {pipeline_group}")
+        # Generate bronze + silver notebook
+        # ... unified logic
+```
+
+#### Notebook Generation
+Silver-only pipelines generate notebooks that read from existing bronze tables:
+
+```python
+# Generated notebook for silver-only pipeline
+@dlt.table(
+    name="customers_scd2",
+    table_properties={
+        "quality": "silver",
+        "operation": "existing_customers_pipeline",
+        "pipelines.autoOptimize.optimizeWrite": "true"
+    }
+)
+def customers_scd2():
+    # Read from existing bronze table (not created by this framework)
+    return dlt.read("bronze_customers_existing_source")
+```
+
+### Benefits for Developers
+
+1. **Flexible Architecture**: Support for various deployment patterns
+2. **Incremental Development**: Can start with silver-only and expand later
+3. **Integration Friendly**: Works with existing data infrastructure
+4. **Consistent Patterns**: Same SCD2 logic regardless of bronze source
+
 **Extension Points**:
 ```python
 # Add new file format support
