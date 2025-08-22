@@ -8,83 +8,82 @@ This guide is for developers who want to extend, modify, or contribute to the Az
 
 ```
 autoloader-framework-pydab/
-├── databricks.yml              # Bundle configuration
-├── mutators.py                 # Job transformation logic
+├── databricks.yml                           # Bundle configuration
 ├── resources/
-│   └── autoloader_jobs.py      # Resource generation logic
+│   ├── notebook_generator.py                # Static notebook generator
+│   └── unified_pipeline_generator.py        # DLT pipeline generator
 ├── src/
-│   ├── notebooks/              # DLT pipeline implementations
-│   │   ├── autoloader_pipeline.py
-│   │   ├── autoloader_grouped_pipeline.py
-│   │   └── autoloader_notebook.py
-│   └── utils/
-│       └── config_parser.py    # TSV configuration parser
+│   └── notebooks/
+│       └── generated/                       # Generated DLT notebooks
 ├── config/
-│   └── ingestion_config.tsv    # Pipeline definitions
-└── sample_data/                # Test data and examples
+│   └── unified_pipeline_config.tsv          # Pipeline definitions
+└── sample_data/                             # Test data and examples
 ```
 
 ### Data Flow
 
 ```mermaid
 graph TD
-    A[TSV Config] --> B[Config Parser]
-    B --> C[Resource Generator]
-    C --> D[DLT Pipelines]
-    C --> E[Notebook Jobs]
-    F[Mutators] --> D
-    F --> E
+    A[TSV Config] --> B[Notebook Generator]
+    A --> C[Resource Generator]
+    B --> D[Generated DLT Notebooks]
+    C --> E[DLT Pipelines]
+    C --> F[Scheduled Jobs]
     D --> G[Delta Tables]
     E --> G
+    F --> E
 ```
 
 ## 🔧 Core Components
 
-### 1. Configuration Parser (`src/utils/config_parser.py`)
+### 1. Notebook Generator (`resources/notebook_generator.py`)
 
-**Purpose**: Validates and parses the TSV configuration file.
+**Purpose**: Generates static, DLT-compatible notebooks for each pipeline group.
 
 **Key Methods**:
-- `load_config()`: Loads and validates TSV file
-- `validate_config()`: Performs comprehensive validation
-- `parse_autoloader_options()`: Parses JSON options
+- `generate_pipeline_group_notebook()`: Creates unified notebook for a pipeline group
+- `generate_bronze_table_notebook()`: Generates bronze ingestion logic
+- `generate_silver_table_notebook()`: Generates silver SCD2 transformation logic
 
 **Extension Points**:
 ```python
-# Add new validation rules
-def validate_custom_field(self, df: pd.DataFrame) -> List[str]:
-    errors = []
-    # Add your validation logic
-    return errors
-
 # Add new file format support
-valid_formats = ['json', 'parquet', 'csv', 'avro', 'orc', 'delta']
+def generate_custom_format_notebook(self, op_name, op_config, notebook_path):
+    """Generate notebook for custom file format."""
+    # Add your custom format logic
+    pass
+
+# Add new table properties
+def add_custom_table_properties(self, table_properties):
+    """Add custom table properties to generated notebooks."""
+    table_properties.update({
+        "custom.property": "value"
+    })
 ```
 
-### 2. Resource Generator (`resources/autoloader_jobs.py`)
+### 2. Resource Generator (`resources/unified_pipeline_generator.py`)
 
 **Purpose**: Generates Databricks resources (pipelines, jobs) from configuration.
 
 **Key Classes**:
-- `AutoloaderResourceGenerator`: Main resource generation logic
+- `UnifiedPipelineGenerator`: Main resource generation logic
 - `Pipeline`: DLT pipeline definitions
-- `Job`: Traditional Databricks job definitions
+- `Job`: Scheduled job definitions with pipeline tasks
 
 **Key Methods**:
 - `generate_resources()`: Main entry point
-- `create_autoloader_pipeline()`: Single DLT pipeline creation
-- `create_grouped_autoloader_pipeline()`: Grouped DLT pipeline creation
-- `create_autoloader_job()`: Traditional job creation
+- `create_unified_pipeline()`: DLT pipeline creation
+- `create_scheduled_job()`: Scheduled job creation with cron schedules
 
 **Extension Examples**:
 
 #### Adding New Resource Types
 ```python
-def create_custom_pipeline(self, config_row: pd.Series) -> CustomResource:
+def create_custom_resource(self, pipeline_group: str, group_rows: List[dict]) -> CustomResource:
     """Create a custom resource type."""
     return CustomResource(
-        name=f"custom_{config_row['pipeline_group']}",
-        configuration=self._build_custom_config(config_row),
+        name=f"custom_{pipeline_group}",
+        configuration=self._build_custom_config(group_rows),
         # Add your custom resource properties
     )
 ```
@@ -98,230 +97,113 @@ def _get_cluster_config(self, cluster_size: str, cluster_config: str) -> dict:
             "node_type_id": "Standard_D16s_v5",
             "autoscale": {
                 "min_workers": 4,
-                "max_workers": 10,
-                "mode": "ENHANCED"
+                "max_workers": 16
             }
         })
-    # ... existing logic
+    return cluster_settings
 ```
 
-### 3. Mutators (`mutators.py`)
+### 3. Configuration Management
 
-**Purpose**: Transform Databricks jobs during deployment.
-
-**Key Functions**:
-- `add_default_cluster_config()`: Adds cluster configuration to jobs
-- `add_monitoring_config()`: Adds monitoring and tagging
-
-**Extension Examples**:
-
-#### Adding Custom Job Transformations
+**TSV Configuration Schema**:
 ```python
-@job_mutator
-def add_custom_config(job: Job) -> Job:
-    """Add custom configuration to all jobs."""
-    if job.tags is None:
-        job.tags = {}
-    
-    job.tags.update({
-        "custom_tag": "custom_value",
-        "environment": "production"
-    })
-    
-    return job
+# Add new configuration columns
+def validate_custom_column(self, df: pd.DataFrame) -> List[str]:
+    errors = []
+    if 'custom_field' in df.columns:
+        # Validate custom field logic
+        pass
+    return errors
+
+# Add new pipeline configuration options
+def parse_custom_pipeline_config(self, config_json: str) -> dict:
+    """Parse custom pipeline configuration options."""
+    try:
+        config = json.loads(config_json)
+        # Add custom parsing logic
+        return config
+    except json.JSONDecodeError:
+        return {}
 ```
 
-#### Adding Environment-Specific Logic
+## 🚀 Development Workflow
+
+### 1. Local Development
+
+```bash
+# Set up virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Test notebook generation
+python resources/notebook_generator.py
+
+# Test resource generation
+python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Import successful')"
+```
+
+### 2. Testing Changes
+
+```bash
+# Test notebook generation
+python resources/notebook_generator.py
+
+# Validate generated notebooks
+python -c "import ast; ast.parse(open('src/notebooks/generated/unified_customer_pipeline.py').read()); print('Syntax valid')"
+
+# Test bundle deployment (dry run)
+databricks bundle validate --profile dev
+```
+
+### 3. Adding New Features
+
+#### New File Format Support
+1. Update `notebook_generator.py` with format-specific logic
+2. Add format validation in configuration parser
+3. Update example configurations
+4. Test with sample data
+
+#### New Pipeline Configuration Options
+1. Add new JSON fields to pipeline_config
+2. Update resource generator to handle new options
+3. Add validation logic
+4. Update documentation
+
+## 🔧 Configuration Extensions
+
+### Custom Pipeline Properties
+
 ```python
-@job_mutator  
-def add_environment_config(job: Job) -> Job:
-    """Add environment-specific configuration."""
-    env = os.getenv("DATABRICKS_BUNDLE_TARGET", "dev")
-    
-    if env == "prod":
-        # Production-specific configuration
-        job.max_concurrent_runs = 1
-        job.timeout_seconds = 3600
+# Add custom pipeline properties
+def add_custom_pipeline_properties(self, unified_config: dict, group_rows: List[dict]):
+    """Add custom properties to pipeline configuration."""
+    for row in group_rows:
+        if row.get('operation_type') == 'silver':
+            custom_config = json.loads(row.get('custom_config', '{}'))
+            for key, value in custom_config.items():
+                unified_config[f"custom.{key}"] = str(value)
+```
+
+### Custom Job Scheduling
+
+```python
+# Add custom scheduling logic
+def create_custom_scheduled_job(self, pipeline_group: str, pipeline: Pipeline, schedule_config: dict) -> Job:
+    """Create job with custom scheduling logic."""
+    if schedule_config.get('type') == 'custom':
+        # Implement custom scheduling logic
+        schedule = self._create_custom_schedule(schedule_config)
     else:
-        # Development configuration
-        job.max_concurrent_runs = 3
-        job.timeout_seconds = 1800
+        schedule = CronSchedule(quartz_cron_expression=schedule_config['cron'])
     
-    return job
-```
-
-### 4. DLT Notebooks (`src/notebooks/`)
-
-**Purpose**: Implement the actual data processing logic.
-
-#### `autoloader_pipeline.py`
-- Single-table DLT pipeline
-- Direct Auto Loader to Delta table processing
-- Automatic schema inference
-
-#### `autoloader_grouped_pipeline.py`  
-- Multi-table DLT pipeline
-- Processes multiple data sources in one pipeline
-- Shared configuration and monitoring
-
-#### `autoloader_notebook.py`
-- Traditional Databricks job implementation
-- More control over processing logic
-- Custom error handling and retry logic
-
-**Extension Examples**:
-
-#### Adding Custom Data Transformations
-```python
-@dlt.table(
-    name="transformed_data",
-    comment="Custom transformed data"
-)
-def transform_data():
-    """Apply custom transformations."""
-    df = dlt.read("raw_data")
-    
-    # Add custom transformations
-    df = df.withColumn("processed_timestamp", current_timestamp())
-    df = df.withColumn("data_quality_score", calculate_quality_score(df))
-    
-    return df
-
-def calculate_quality_score(df):
-    """Custom data quality calculation."""
-    # Implement your quality scoring logic
-    return lit(0.95)  # Example score
-```
-
-#### Adding Data Quality Checks
-```python
-@dlt.expect_all_or_drop("valid_records")
-@dlt.expect("valid_email", "email IS NOT NULL AND email LIKE '%@%'")
-@dlt.expect("valid_timestamp", "created_at IS NOT NULL")
-def quality_validated_data():
-    """Data with quality validation."""
-    return dlt.read("raw_data")
-```
-
-## 🔌 Extension Points
-
-### 1. Adding New File Formats
-
-#### Step 1: Update Configuration Parser
-```python
-# In src/utils/config_parser.py
-valid_formats = ['json', 'parquet', 'csv', 'avro', 'orc', 'delta', 'xml']  # Add 'xml'
-```
-
-#### Step 2: Add Format-Specific Options
-```python
-# In src/notebooks/autoloader_pipeline.py
-def get_format_options(file_format: str) -> dict:
-    """Get format-specific Auto Loader options."""
-    options = {}
-    
-    if file_format.lower() == "xml":
-        options.update({
-            "cloudFiles.rowTag": "record",
-            "cloudFiles.attributePrefix": "_attr_",
-            "cloudFiles.valueTag": "_value"
-        })
-    
-    return options
-```
-
-#### Step 3: Update Documentation
-Add the new format to configuration examples and troubleshooting guide.
-
-### 2. Adding New Compute Options
-
-#### Step 1: Update Cluster Configuration
-```python
-# In resources/autoloader_jobs.py
-def _get_cluster_config(self, cluster_size: str, cluster_config: str) -> dict:
-    """Generate cluster configuration."""
-    
-    if cluster_size == "gpu_small":
-        cluster_settings.update({
-            "node_type_id": "Standard_NC6s_v3",  # GPU instance
-            "autoscale": {
-                "min_workers": 1,
-                "max_workers": 2,
-                "mode": "ENHANCED"
-            }
-        })
-```
-
-#### Step 2: Update Validation
-```python
-# In src/utils/config_parser.py
-valid_cluster_sizes = ['small', 'medium', 'large', 'serverless', 'gpu_small']
-```
-
-### 3. Adding Custom Monitoring
-
-#### Step 1: Create Custom Metrics
-```python
-# In src/notebooks/autoloader_pipeline.py
-def add_custom_metrics(df):
-    """Add custom monitoring metrics."""
-    
-    # Record processing metrics
-    row_count = df.count()
-    spark.conf.set("custom.metrics.row_count", row_count)
-    
-    # Add custom columns for monitoring
-    df = df.withColumn("processing_batch_id", lit(uuid.uuid4().hex))
-    df = df.withColumn("data_source_quality", calculate_data_quality(df))
-    
-    return df
-```
-
-#### Step 2: Create Custom Alerts
-```python
-@job_mutator
-def add_alerting_config(job: Job) -> Job:
-    """Add custom alerting configuration."""
-    
-    # Add webhook notifications
-    if job.webhook_notifications is None:
-        job.webhook_notifications = WebhookNotifications()
-    
-    job.webhook_notifications.on_failure = [
-        WebhookNotification(id="custom-alert-webhook")
-    ]
-    
-    return job
-```
-
-### 4. Adding Custom Resource Types
-
-#### Step 1: Define New Resource Class
-```python
-# In resources/autoloader_jobs.py
-from databricks.sdk.service.ml import Model
-
-def create_ml_model(self, config_row: pd.Series) -> Model:
-    """Create ML model resource."""
-    return Model(
-        name=f"autoloader_model_{config_row['pipeline_group']}",
-        description="Auto-generated model for data quality scoring"
+    return Job(
+        name=f"custom_{pipeline_group}_job",
+        tasks=[Task(task_key="custom_task", pipeline_task=PipelineTask(pipeline_id=pipeline.name))],
+        schedule=schedule
     )
-```
-
-#### Step 2: Integrate with Resource Generation
-```python
-def generate_resources(self) -> tuple[List[Pipeline], List[Job], List[Model]]:
-    """Generate all resources including custom types."""
-    # ... existing logic ...
-    
-    models = []
-    for idx, row in config_df.iterrows():
-        if row.get('create_model', False):
-            model = self.create_ml_model(row)
-            models.append(model)
-    
-    return pipelines, jobs, models
 ```
 
 ## 🧪 Testing
@@ -329,170 +211,98 @@ def generate_resources(self) -> tuple[List[Pipeline], List[Job], List[Model]]:
 ### Unit Tests
 
 ```python
-# tests/test_config_parser.py
-import pytest
-from src.utils.config_parser import ConfigParser
+# Test notebook generation
+def test_notebook_generation():
+    generator = NotebookGenerator()
+    generator.generate_all_notebooks()
+    
+    # Verify notebooks were created
+    assert os.path.exists("src/notebooks/generated/unified_customer_pipeline.py")
+    assert os.path.exists("src/notebooks/generated/unified_product_pipeline.py")
 
-def test_valid_config():
-    """Test configuration validation with valid data."""
-    parser = ConfigParser("tests/fixtures/valid_config.tsv")
-    df = parser.load_config()
-    errors = parser.validate_config(df)
-    assert len(errors) == 0
-
-def test_invalid_source_type():
-    """Test validation with invalid source type."""
-    parser = ConfigParser("tests/fixtures/invalid_source.tsv")
-    df = parser.load_config()
-    errors = parser.validate_config(df)
-    assert any("Invalid source types" in error for error in errors)
+# Test resource generation
+def test_resource_generation():
+    bundle = MockBundle()
+    generator = UnifiedPipelineGenerator(bundle)
+    pipelines, jobs = generator.generate_resources()
+    
+    assert len(pipelines) == 4  # customer, order, order_items, product
+    assert len(jobs) == 4
 ```
 
 ### Integration Tests
 
-```python
-# tests/test_resource_generation.py
-def test_pipeline_generation():
-    """Test DLT pipeline generation."""
-    generator = AutoloaderResourceGenerator("tests/fixtures/test_config.tsv")
-    pipelines, jobs = generator.generate_resources()
-    
-    assert len(pipelines) > 0
-    assert all(p.name.startswith("autoloader_") for p in pipelines)
-    assert all(p.edition == "ADVANCED" for p in pipelines)
-```
-
-### End-to-End Tests
-
-```python
-# tests/test_deployment.py
-def test_bundle_deployment():
-    """Test complete bundle deployment."""
-    # This would require a test Databricks workspace
-    result = subprocess.run([
-        "databricks", "bundle", "validate", 
-        "--profile", "test"
-    ], capture_output=True)
-    
-    assert result.returncode == 0
-```
-
-## 🐛 Debugging
-
-### Common Development Issues
-
-#### 1. Bundle Validation Errors
 ```bash
-# Check bundle syntax
+# Test complete workflow
+python resources/notebook_generator.py
+python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('✅ All imports successful')"
 databricks bundle validate --profile dev
-
-# Inspect generated resources
-databricks bundle summary --profile dev
 ```
 
-#### 2. Resource Generation Issues
-```python
-# Add debug logging to resource generator
-import logging
-logging.basicConfig(level=logging.DEBUG)
+## 📚 Best Practices
 
-# In autoloader_jobs.py
-print(f"🔍 Processing row: {row.to_dict()}")
-print(f"📋 Generated config: {pipeline_config}")
+### Code Organization
+- Keep notebook generation logic separate from resource generation
+- Use consistent naming conventions for pipeline groups
+- Implement proper error handling and logging
+- Add comprehensive validation for configuration files
+
+### Performance Considerations
+- Generate notebooks once, not on every deployment
+- Use resource references for pipeline dependencies
+- Implement proper cleanup for temporary resources
+- Cache configuration parsing results
+
+### Security
+- Validate all configuration inputs
+- Sanitize file paths and table names
+- Use proper authentication for Databricks connections
+- Implement least-privilege access controls
+
+## 🔍 Debugging
+
+### Common Issues
+
+1. **Import Errors**: Check virtual environment and dependencies
+2. **Configuration Errors**: Validate TSV format and JSON syntax
+3. **Deployment Errors**: Check Databricks profile and permissions
+4. **Scheduling Issues**: Verify Quartz cron syntax
+
+### Debug Commands
+
+```bash
+# Check configuration parsing
+python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
+
+# Validate JSON configuration
+python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
+
+# Test resource generation step by step
+python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
 ```
 
-#### 3. Notebook Execution Issues
-```python
-# Add debug prints to notebooks
-print(f"📊 DataFrame schema: {df.schema}")
-print(f"🔢 Row count: {df.count()}")
-print(f"⚙️ Read options: {read_options}")
-```
+## 📖 Additional Resources
 
-### Debug Tools
+- [Databricks Asset Bundles Documentation](https://docs.databricks.com/dev-tools/bundles/)
+- [Delta Live Tables Developer Guide](https://docs.databricks.com/data-engineering/delta-live-tables/)
+- [Auto Loader Configuration Options](https://docs.databricks.com/ingestion/auto-loader/options.html)
+- [Unity Catalog Development](https://docs.databricks.com/data-governance/unity-catalog/)
 
-#### Configuration Inspector
-```python
-# debug/inspect_config.py
-from src.utils.config_parser import ConfigParser
+## 🤝 Contributing
 
-def inspect_configuration():
-    """Inspect and validate configuration."""
-    parser = ConfigParser("config/ingestion_config.tsv")
-    df = parser.load_config()
-    
-    print("📋 Configuration Summary:")
-    print(f"  Rows: {len(df)}")
-    print(f"  Columns: {list(df.columns)}")
-    
-    errors = parser.validate_config(df)
-    if errors:
-        print("❌ Validation Errors:")
-        for error in errors:
-            print(f"  - {error}")
-    else:
-        print("✅ Configuration is valid")
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
 
-if __name__ == "__main__":
-    inspect_configuration()
-```
+### Code Standards
+- Follow PEP 8 Python style guidelines
+- Add comprehensive docstrings for all functions
+- Include error handling and validation
+- Write tests for new functionality
+- Update documentation for new features
 
-#### Resource Inspector
-```python
-# debug/inspect_resources.py
-from resources.autoloader_jobs import AutoloaderResourceGenerator
+## 📄 License
 
-def inspect_resources():
-    """Inspect generated resources."""
-    generator = AutoloaderResourceGenerator("config/ingestion_config.tsv")
-    pipelines, jobs = generator.generate_resources()
-    
-    print(f"📊 Generated Resources:")
-    print(f"  Pipelines: {len(pipelines)}")
-    print(f"  Jobs: {len(jobs)}")
-    
-    for pipeline in pipelines:
-        print(f"  Pipeline: {pipeline.name}")
-        print(f"    Serverless: {pipeline.serverless}")
-        print(f"    Continuous: {pipeline.continuous}")
-
-if __name__ == "__main__":
-    inspect_resources()
-```
-
-## 📚 Additional Resources
-
-### Development Tools
-- **[Databricks CLI](https://docs.databricks.com/azure/en/dev-tools/cli/index.html)** - Command-line interface
-- **[Databricks SDK](https://docs.databricks.com/azure/en/dev-tools/sdk-python.html)** - Python SDK documentation
-- **[Bundle Development](https://docs.databricks.com/azure/en/dev-tools/bundles/index.html)** - Asset bundle development guide
-
-### API References
-- **[Jobs API](https://docs.databricks.com/azure/en/dev-tools/api/latest/jobs.html)** - Jobs API reference
-- **[Pipelines API](https://docs.databricks.com/azure/en/dev-tools/api/latest/pipelines.html)** - DLT Pipelines API reference
-- **[Workspace API](https://docs.databricks.com/azure/en/dev-tools/api/latest/workspace.html)** - Workspace API reference
-
-### Best Practices
-- **[Code Organization](https://docs.databricks.com/azure/en/dev-tools/bundles/best-practices.html)** - Bundle organization best practices
-- **[Version Control](https://docs.databricks.com/azure/en/repos/index.html)** - Git integration with Databricks
-- **[CI/CD Patterns](https://docs.databricks.com/azure/en/dev-tools/bundles/deployment-patterns.html)** - Deployment automation patterns
-
----
-
-## 🤝 Contributing Guidelines
-
-1. **Follow Code Style**: Use Black for Python formatting
-2. **Add Tests**: Include unit tests for new functionality  
-3. **Update Documentation**: Update both user and developer docs
-4. **Validate Changes**: Test with `databricks bundle validate`
-5. **Performance**: Consider impact on bundle deployment time
-
-## 📞 Getting Help
-
-- **Framework Issues**: Create GitHub issues with detailed reproduction steps
-- **Databricks Questions**: Use [Databricks Community](https://community.databricks.com/)
-- **Azure Integration**: Refer to [Azure Databricks Documentation](https://docs.databricks.com/azure/)
-
----
-
-**Happy coding! 🚀**
+This project is licensed under the MIT License - see the LICENSE file for details.

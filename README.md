@@ -11,7 +11,8 @@ A modern, declarative data pipeline framework for Databricks that combines bronz
 - **Declarative Configuration**: Simple TSV-based configuration for pipeline definitions
 - **Static Notebook Generation**: Pre-generated notebooks for each pipeline group ensuring DLT compatibility
 - **Unity Catalog Ready**: Full compatibility with Databricks Unity Catalog
-- **Audit Trail**: Comprehensive file metadata tracking including filename, path, and modification time
+- **Automated Scheduling**: Cron-based job scheduling with proper resource references
+- **Serverless Compute**: Optimized for quick testing and development
 
 ## 🏗️ Architecture
 
@@ -25,7 +26,7 @@ The framework uses a **unified pipeline approach** where each `pipeline_group` c
 1. **Configuration Layer** (`config/unified_pipeline_config.tsv`)
    - Pipeline grouping by business domain
    - Bronze and silver operation definitions
-   - Unified configuration for both layers
+   - Quartz cron scheduling configuration
 
 2. **Notebook Generator** (`resources/notebook_generator.py`)
    - Generates static DLT notebooks for each pipeline group
@@ -56,6 +57,8 @@ autloader-framework-pydab/
 │       ├── unified_product_pipeline.py
 │       ├── unified_customer_pipeline.py
 │       └── ...
+├── docs/
+│   └── DEVELOPER.md                         # Developer documentation
 ├── databricks.yml                           # Bundle configuration
 └── README.md
 ```
@@ -75,18 +78,27 @@ The `unified_pipeline_config.tsv` file defines:
 | `source_path` | Source location | `abfss://...` |
 | `target_table` | Target table path | `vbdemos.adls_bronze.products_new` |
 | `trigger_type` | Pipeline trigger | `time` |
-| `schedule` | Cron schedule | `0 */10 * * *` |
+| `schedule` | Quartz cron schedule | `0 0 6 * * ?` |
 | `pipeline_config` | JSON configuration | `{"keys": ["product_id"], ...}` |
-| `cluster_size` | Cluster configuration | `medium` |
+| `cluster_size` | Cluster configuration | `medium`, `serverless` |
 | `notifications` | Email notifications | `{"email_on_success": "true"}` |
+
+### Quartz Cron Scheduling
+
+The framework uses **Quartz cron syntax** for precise scheduling:
+
+- **Daily**: `0 0 6 * * ?` (6:00 AM daily)
+- **Weekly**: `0 0 9 ? * 2` (Monday at 9:00 AM)
+- **Monthly**: `0 0 12 1 * ?` (1st of month at 12:00 PM)
+- **Interval**: `0 0 */20 * * ?` (Every 20 minutes)
 
 ### Pipeline Configuration JSON
 
 #### Bronze Operations
 ```json
 {
-  "schema_location": "abfss://.../schema",
-  "checkpoint_location": "abfss://.../checkpoint",
+  "cloudFiles.schemaLocation": "abfss://.../schema",
+  "cloudFiles.checkpointLocation": "abfss://.../checkpoint",
   "cloudFiles.maxFilesPerTrigger": "200",
   "cloudFiles.allowOverwrites": "false",
   "header": "true",
@@ -111,8 +123,8 @@ The `unified_pipeline_config.tsv` file defines:
 Edit `config/unified_pipeline_config.tsv` to define your pipeline groups:
 
 ```tsv
-bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 */10 * * *	{"schema_location": "abfss://...", "checkpoint_location": "abfss://..."}	medium	{"email_on_success": "true"}
-silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 */10 * * * *	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	medium	{"email_on_success": "true"}
+bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "abfss://...", "cloudFiles.checkpointLocation": "abfss://..."}	serverless	{"email_on_success": "true"}
+silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	serverless	{"email_on_success": "true"}
 ```
 
 ### 2. Generate Notebooks
@@ -178,6 +190,7 @@ dlt.create_auto_cdc_flow(
 - **Performance**: Optimized DLT pipelines with proper metadata handling
 - **Maintainability**: Configuration-driven approach with generated code
 - **Unity Catalog Ready**: Full compatibility with modern Databricks features
+- **Automated Scheduling**: Cron-based jobs with proper resource references
 
 ## 🔍 Monitoring
 
@@ -185,6 +198,7 @@ dlt.create_auto_cdc_flow(
 - **CDF Queries**: Query change history using Delta Lake change data feed
 - **Audit Trail**: File-level metadata for data lineage
 - **Error Handling**: Comprehensive error reporting and notifications
+- **Job Scheduling**: Monitor scheduled job execution and pipeline runs
 
 ## 📚 Additional Resources
 
@@ -192,6 +206,7 @@ dlt.create_auto_cdc_flow(
 - [Auto Loader Options](https://docs.databricks.com/ingestion/auto-loader/options.html)
 - [Change Data Capture with DLT](https://docs.databricks.com/dlt/cdc)
 - [Unity Catalog Best Practices](https://docs.databricks.com/data-governance/unity-catalog/)
+- [Databricks Asset Bundles](https://docs.databricks.com/dev-tools/bundles/)
 
 ## 🤝 Contributing
 
@@ -200,6 +215,8 @@ dlt.create_auto_cdc_flow(
 3. Make your changes
 4. Test thoroughly
 5. Submit a pull request
+
+For developer-specific information, see [docs/DEVELOPER.md](docs/DEVELOPER.md).
 
 ## 📄 License
 
