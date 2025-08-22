@@ -3,7 +3,7 @@ import json
 import os
 from typing import Dict, Any, List
 from databricks.bundles.core import Bundle, Resources, Variable, variables
-from databricks.bundles.jobs import Job, Task, NotebookTask
+from databricks.bundles.jobs import Job, Task, PipelineTask, CronSchedule
 from databricks.bundles.pipelines import Pipeline, PipelineLibrary, NotebookLibrary
 
 
@@ -79,13 +79,6 @@ class UnifiedPipelineGenerator:
         if email_config:
             unified_config["email_notifications"] = json.dumps(email_config)
         
-        # Add unified scheduling
-        if unified_schedule:
-            # Ensure the trigger interval is properly formatted for Databricks
-            trigger_interval = f'"{unified_schedule}"'  # Wrap in quotes as per Databricks requirements
-            unified_config["pipelines.trigger.interval"] = trigger_interval
-            print(f"   ⏰ Applied unified schedule: {trigger_interval}")
-        
         # Extract and merge pipeline-specific configuration from TSV
         for row in group_rows:
             if row.get('operation_type') == 'silver' and row.get('pipeline_config'):
@@ -128,7 +121,7 @@ class UnifiedPipelineGenerator:
                         print(f"   🎯 Using target schema: {target_schema} (from {target_table})")
                         break
         
-        # Create the unified pipeline
+        # Create the unified pipeline with a resource name for referencing
         pipeline = Pipeline(
             name=f"unified_{pipeline_group}",
             libraries=[pipeline_library],
@@ -149,12 +142,75 @@ class UnifiedPipelineGenerator:
             clusters=None  # No clusters needed for serverless
         )
         
+        # Set the resource name for referencing in jobs
+        pipeline.resource_name = f"unified_{pipeline_group}_pipeline"
+        
         print(f"   🎯 Created pipeline '{pipeline.name}' with configuration:")
         print(f"      - Trigger interval: {unified_config.get('pipelines.trigger.interval', 'Not set')}")
         print(f"      - Continuous mode: {pipeline.continuous}")
         print(f"      - Serverless: {pipeline.serverless}")
         
         return pipeline
+
+    def create_scheduled_job(self, pipeline_group: str, pipeline: Pipeline, group_rows: List[dict]) -> Job:
+        """Create a scheduled job that runs the pipeline based on TSV cron configuration."""
+        
+        print(f"   🔧 Creating scheduled job for pipeline: {pipeline.name}")
+        
+        # Get the Quartz cron schedule directly from the TSV config
+        cron_schedule = self._get_quartz_cron_for_group(pipeline_group, group_rows)
+        
+        # Create the job with pipeline task using resource reference
+        # This will resolve to the actual pipeline ID during deployment
+        job = Job(
+            name=f"unified_{pipeline_group}_job",
+            tasks=[
+                Task(
+                    task_key=f"pipeline_task_{pipeline_group}",
+                    pipeline_task=PipelineTask(
+                        pipeline_id=f"${{resources.pipelines.unified_{pipeline_group}_pipeline.id}}"
+                    ),
+                    run_if="ALL_SUCCESS"
+                )
+            ],
+            schedule=CronSchedule(
+                quartz_cron_expression=cron_schedule,
+                timezone_id="UTC"
+            ),
+            max_concurrent_runs=1,
+            tags={
+                "deployment_type": "unified_framework",
+                "pipeline_group": pipeline_group,
+                "framework": "unified-autoloader-pydab",
+                "scheduling": "cron_based"
+            }
+        )
+        
+        print(f"      ⏰ Applied cron schedule: {cron_schedule}")
+        print(f"      🎯 Job will run pipeline: {pipeline.name}")
+        
+        # Set the resource name for the job
+        job.resource_name = f"unified_{pipeline_group}_job"
+        
+        return job
+
+    def _get_quartz_cron_for_group(self, pipeline_group: str, group_rows: List[dict]) -> str:
+        """Get the Quartz cron schedule directly from the TSV config for a pipeline group."""
+        
+        # Look for the silver operation to get the schedule
+        for row in group_rows:
+            if row.get('operation_type') == 'silver':
+                schedule = row.get('schedule', '')
+                if schedule and pd.notna(schedule):
+                    print(f"      📅 Found Quartz cron schedule: '{schedule}'")
+                    return schedule
+        
+        # Fallback to default schedule if none found
+        default_schedule = "0 0 6 * * ?"  # Daily at 6 AM in Quartz syntax
+        print(f"      ⚠️  No schedule found, using default: '{default_schedule}'")
+        return default_schedule
+
+    # Removed _convert_to_quartz_cron method - now using Quartz cron directly in TSV config
 
     def _get_unified_schedule_for_group(self, pipeline_group: str, group_rows: List[pd.Series]) -> str:
         """Determine the unified schedule for a pipeline group based on all operations."""
@@ -323,7 +379,7 @@ class UnifiedPipelineGenerator:
         return result
 
     def generate_resources(self) -> tuple[List[Pipeline], List[Job]]:
-        """Generate unified DLT pipelines from configuration."""
+        """Generate unified DLT pipelines and scheduled jobs from configuration."""
         print("🚀 Generating unified pipeline resources...")
         
         # Load configuration
@@ -336,19 +392,36 @@ class UnifiedPipelineGenerator:
         jobs = []
         
         print(f"\n📊 Found {len(pipeline_groups)} pipeline groups:")
+        
+        # First pass: Create all pipelines
+        pipeline_map = {}  # Map pipeline_group -> pipeline object
         for group_name, group_df in pipeline_groups:
             print(f"  📁 {group_name}: {len(group_df)} operations")
             
-            # Create unified pipeline for this group
             try:
                 pipeline = self.create_unified_pipeline(group_name, group_df.to_dict('records'))
                 pipelines.append(pipeline)
+                pipeline_map[group_name] = pipeline
                 print(f"  ✅ Created unified pipeline: {pipeline.name}")
+                
             except Exception as e:
                 print(f"  ❌ Error creating pipeline for {group_name}: {e}")
                 continue
         
-        print(f"\n✅ Generated {len(pipelines)} unified pipelines")
+        # Second pass: Create jobs that reference the actual pipelines
+        print(f"\n🔧 Creating scheduled jobs for {len(pipeline_map)} pipelines...")
+        for group_name, pipeline in pipeline_map.items():
+            try:
+                # Create scheduled job for this pipeline
+                job = self.create_scheduled_job(group_name, pipeline, df[df['pipeline_group'] == group_name].to_dict('records'))
+                jobs.append(job)
+                print(f"  ✅ Created scheduled job: {job.name}")
+                
+            except Exception as e:
+                print(f"  ❌ Error creating job for {group_name}: {e}")
+                continue
+        
+        print(f"\n✅ Generated {len(pipelines)} unified pipelines and {len(jobs)} scheduled jobs")
         return pipelines, jobs
 
 
@@ -367,15 +440,17 @@ def load_resources(bundle: Bundle) -> Resources:
     
     print(f"\n📦 Adding resources to bundle:")
     
-    # Add pipelines to resources
+    # Add pipelines to resources using their resource names
     for pipeline in pipelines:
-        print(f"  + Pipeline: {pipeline.name}")
-        resources.add_pipeline(pipeline.name, pipeline)
+        resource_name = getattr(pipeline, 'resource_name', pipeline.name)
+        print(f"  + Pipeline: {pipeline.name} (resource: {resource_name})")
+        resources.add_pipeline(resource_name, pipeline)
     
-    # Add jobs to resources
+    # Add jobs to resources using their resource names
     for job in jobs:
-        print(f"  + Job: {job.name}")
-        resources.add_job(job.name, job)
+        resource_name = getattr(job, 'resource_name', job.name)
+        print(f"  + Job: {job.name} (resource: {resource_name})")
+        resources.add_job(resource_name, job)
     
     print(f"\n🎯 Total resources loaded: {len(pipelines)} pipelines + {len(jobs)} jobs = {len(pipelines) + len(jobs)} total")
     
