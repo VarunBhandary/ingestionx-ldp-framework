@@ -98,7 +98,7 @@ The framework is designed to support **silver-only pipelines** for existing bron
 #### Configuration
 ```tsv
 # Silver-only pipeline configuration
-silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"email_on_success": "true"}
+silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
 ```
 
 #### Resource Generation
@@ -146,6 +146,77 @@ def customers_scd2():
 2. **Incremental Development**: Can start with silver-only and expand later
 3. **Integration Friendly**: Works with existing data infrastructure
 4. **Consistent Patterns**: Same SCD2 logic regardless of bronze source
+
+## 📧 Notification System
+
+The framework automatically configures email notifications for scheduled jobs based on the TSV configuration.
+
+### Implementation
+
+#### Notification Parsing
+```python
+def _get_notification_config_for_group(self, pipeline_group: str, group_rows: List[dict]) -> JobEmailNotifications:
+    """Get notification configuration from the TSV config for a pipeline group."""
+    
+    # Look for the silver operation to get the notification config
+    for row in group_rows:
+        if row.get('operation_type') == 'silver':
+            notifications = row.get('notifications', '')
+            if notifications and pd.notna(notifications):
+                try:
+                    notification_data = json.loads(notifications)
+                    
+                    # Create JobEmailNotifications object
+                    recipients = notification_data.get('recipients', [])
+                    email_notifications = JobEmailNotifications(
+                        on_success=recipients if notification_data.get('on_success', False) else [],
+                        on_failure=recipients if notification_data.get('on_failure', True) else []
+                    )
+                    
+                    return email_notifications
+                    
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Error parsing notification config: {e}")
+                    break
+    
+    return None
+```
+
+#### Job Integration
+```python
+def create_scheduled_job(self, pipeline_group: str, pipeline: Pipeline, group_rows: List[dict]) -> Job:
+    # ... existing job creation code ...
+    
+    # Apply notification configuration if specified
+    notification_config = self._get_notification_config_for_group(pipeline_group, group_rows)
+    if notification_config:
+        job.email_notifications = notification_config
+        print(f"Applied notifications: {notification_config}")
+    
+    return job
+```
+
+### Configuration Format
+
+The `notifications` column in the TSV uses JSON format:
+
+```json
+{
+  "on_success": true,
+  "on_failure": true,
+  "recipients": ["admin@company.com", "data-team@company.com"]
+}
+```
+
+**Parameters:**
+- **`on_success`**: Boolean - send email on successful completion
+- **`on_failure`**: Boolean - send email on failure (defaults to true)
+- **`recipients`**: Array of email addresses to notify
+
+**Databricks Integration:**
+- Notifications are applied to the scheduled job, not the pipeline
+- Uses `JobEmailNotifications` class from Databricks Asset Bundles
+- Supports all Databricks notification types (success, failure, start, etc.)
 
 **Extension Points**:
 ```python

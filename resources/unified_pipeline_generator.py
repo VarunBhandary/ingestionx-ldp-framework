@@ -3,7 +3,7 @@ import json
 import os
 from typing import Dict, Any, List
 from databricks.bundles.core import Bundle, Resources, Variable, variables
-from databricks.bundles.jobs import Job, Task, PipelineTask, CronSchedule
+from databricks.bundles.jobs import Job, Task, PipelineTask, CronSchedule, JobEmailNotifications
 from databricks.bundles.pipelines import Pipeline, PipelineLibrary, NotebookLibrary
 
 
@@ -160,6 +160,9 @@ class UnifiedPipelineGenerator:
         # Get the Quartz cron schedule directly from the TSV config
         cron_schedule = self._get_quartz_cron_for_group(pipeline_group, group_rows)
         
+        # Get notification configuration from the silver operation
+        notification_config = self._get_notification_config_for_group(pipeline_group, group_rows)
+        
         # Create the job with pipeline task using resource reference
         # This will resolve to the actual pipeline ID during deployment
         job = Job(
@@ -186,6 +189,11 @@ class UnifiedPipelineGenerator:
             }
         )
         
+        # Apply notification configuration if specified
+        if notification_config:
+            job.email_notifications = notification_config
+            print(f"      📧 Applied notifications: {notification_config}")
+        
         print(f"      ⏰ Applied cron schedule: {cron_schedule}")
         print(f"      🎯 Job will run pipeline: {pipeline.name}")
         
@@ -209,6 +217,35 @@ class UnifiedPipelineGenerator:
         default_schedule = "0 0 6 * * ?"  # Daily at 6 AM in Quartz syntax
         print(f"      ⚠️  No schedule found, using default: '{default_schedule}'")
         return default_schedule
+
+    def _get_notification_config_for_group(self, pipeline_group: str, group_rows: List[dict]) -> JobEmailNotifications:
+        """Get notification configuration from the TSV config for a pipeline group."""
+        
+        # Look for the silver operation to get the notification config
+        for row in group_rows:
+            if row.get('operation_type') == 'silver':
+                notifications = row.get('notifications', '')
+                if notifications and pd.notna(notifications):
+                    try:
+                        notification_data = json.loads(notifications)
+                        print(f"      📧 Found notification config: {notification_data}")
+                        
+                        # Create JobEmailNotifications object
+                        recipients = notification_data.get('recipients', [])
+                        email_notifications = JobEmailNotifications(
+                            on_success=recipients if notification_data.get('on_success', False) else [],
+                            on_failure=recipients if notification_data.get('on_failure', True) else []
+                        )
+                        
+                        return email_notifications
+                        
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"      ⚠️  Error parsing notification config: {e}")
+                        break
+        
+        # Return None if no valid notification config found
+        print(f"      📧 No notification config found, using defaults")
+        return None
 
     # Removed _convert_to_quartz_cron method - now using Quartz cron directly in TSV config
 

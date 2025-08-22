@@ -81,7 +81,7 @@ The `unified_pipeline_config.tsv` file defines:
 | `schedule` | Quartz cron schedule | `0 0 6 * * ?` |
 | `pipeline_config` | JSON configuration | `{"keys": ["product_id"], ...}` |
 | `cluster_size` | Cluster configuration | `medium`, `serverless` |
-| `notifications` | Email notifications | `{"email_on_success": "true"}` |
+| `notifications` | Email notifications | `{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}` |
 
 ### Quartz Cron Scheduling
 
@@ -91,6 +91,35 @@ The framework uses **Quartz cron syntax** for precise scheduling:
 - **Weekly**: `0 0 9 ? * 2` (Monday at 9:00 AM)
 - **Monthly**: `0 0 12 1 * ?` (1st of month at 12:00 PM)
 - **Interval**: `0 0 */20 * * ?` (Every 20 minutes)
+
+### Notification Configuration
+
+The `notifications` column supports email notifications for scheduled jobs:
+
+```json
+{
+  "on_success": true,
+  "on_failure": true,
+  "recipients": ["admin@company.com", "data-team@company.com"]
+}
+```
+
+**Notification Options:**
+- **`on_success`**: Send email on successful job completion (boolean)
+- **`on_failure`**: Send email on job failure (boolean, defaults to true)
+- **`recipients`**: List of email addresses to notify
+
+**Examples:**
+```json
+// Notify on both success and failure
+{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+
+// Notify only on failure
+{"on_success": false, "on_failure": true, "recipients": ["data-team@company.com"]}
+
+// Multiple recipients
+{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com", "product-team@company.com"]}
+```
 
 ### Pipeline Configuration JSON
 
@@ -124,8 +153,8 @@ Edit `config/unified_pipeline_config.tsv` to define your pipeline groups:
 
 #### Unified Pipeline (Bronze + Silver)
 ```tsv
-bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "abfss://...", "cloudFiles.checkpointLocation": "abfss://..."}	serverless	{"email_on_success": "true"}
-silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	serverless	{"email_on_success": "true"}
+bronze	product_pipeline	file	csv	abfss://container@storage.dfs.core.windows.net/data/	vbdemos.adls_bronze.products_new	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "abfss://...", "cloudFiles.checkpointLocation": "abfss://..."}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+silver	product_pipeline	table		vbdemos.adls_bronze.products_new	vbdemos.adls_silver.products_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["product_name"], "stored_as_scd_type": "2", "sequence_by": "_ingestion_timestamp"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
 ```
 
 #### Silver-Only Pipeline (Existing Bronze Table)
@@ -201,7 +230,7 @@ The framework supports creating **silver-only pipelines** for existing bronze ta
 
 ```tsv
 # Silver-only pipeline for existing bronze table
-silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"email_on_success": "true"}
+silver	existing_customers_pipeline	table		vbdemos.adls_bronze.customers_existing	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
 ```
 
 ### How It Works
