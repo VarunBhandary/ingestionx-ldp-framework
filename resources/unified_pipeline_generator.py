@@ -30,43 +30,28 @@ class UnifiedPipelineGenerator:
         print(f"📋 Loaded {len(df)} pipeline configurations")
         return df
 
-    def create_unified_pipeline(self, pipeline_group: str, row: pd.Series) -> Pipeline:
-        """Create a single unified DLT pipeline that handles both bronze and silver operations."""
+    def create_unified_pipeline(self, pipeline_group: str, group_rows: List[pd.Series]) -> Pipeline:
+        """Create a single unified DLT pipeline that handles multiple operations within a group."""
         
         print(f"🔧 Creating unified pipeline for group: {pipeline_group}")
+        print(f"   📊 Operations in group: {len(group_rows)}")
         
-        # Get configuration
-        cluster_size = row.get('cluster_size', 'medium')
-        cluster_config = row.get('cluster_config', '')
-        schedule = row.get('schedule', '0 */10 * * *')
+        # Get common configuration from the first row
+        first_row = group_rows[0]
+        cluster_size = first_row.get('cluster_size', 'medium')
+        cluster_config = first_row.get('cluster_config', '')
         
-        # Parse email notifications
+        # Parse email notifications from the first row
         email_notifications = {}
-        if row.get('email_notifications') and pd.notna(row['email_notifications']):
+        if first_row.get('email_notifications') and pd.notna(first_row['email_notifications']):
             try:
-                email_notifications = json.loads(row['email_notifications'])
+                email_notifications = json.loads(first_row['email_notifications'])
             except json.JSONDecodeError:
                 print(f"Warning: Invalid JSON in email_notifications for {pipeline_group}")
         
-        # Parse pipeline configuration
-        pipeline_config = {}
-        if row.get('pipeline_config') and pd.notna(row['pipeline_config']):
-            try:
-                pipeline_config = json.loads(row['pipeline_config'])
-            except json.JSONDecodeError:
-                print(f"Warning: Invalid JSON in pipeline_config for {pipeline_group}")
-        
-        # Create pipeline library
-        pipeline_library = PipelineLibrary(
-            notebook=NotebookLibrary(
-                path="src/notebooks/unified_pipeline.py"
-            )
-        )
-        
-        # Build unified configuration
+        # Build unified configuration with all operations
         unified_config = {
             "pipeline_group": pipeline_group,
-            "pipeline_config": json.dumps(pipeline_config),
             "pipelines.enableDPMForExistingPipeline": "true",
             "pipelines.setMigrationHints": "true",
             "pipelines.autoOptimize.optimizeWrite": "true",
@@ -77,11 +62,58 @@ class UnifiedPipelineGenerator:
         if email_notifications:
             unified_config["email_notifications"] = json.dumps(email_notifications)
         
-        # Add schedule configuration
-        interval = self._parse_cron_to_interval(schedule)
-        if interval:
-            unified_config["pipelines.trigger.interval"] = interval
-            print(f"   ⏰ Applied schedule: {schedule} -> {interval}")
+        # Determine unified scheduling strategy for the pipeline group
+        unified_schedule = self._get_unified_schedule_for_group(pipeline_group, group_rows)
+        if unified_schedule:
+            unified_config["pipelines.trigger.interval"] = unified_schedule
+            print(f"   ⏰ Applied unified schedule: {unified_schedule}")
+        
+        # Build operations configuration
+        operations_config = {}
+        for row in group_rows:
+            pipeline_type = row['pipeline_type']
+            operation_name = f"{pipeline_type}_{pipeline_group.split('_')[0]}"  # e.g., bronze_customer, silver_customer
+            
+            if pipeline_type == 'bronze':
+                # Bronze operation configuration
+                operations_config[operation_name] = {
+                    "source_path": row.get('source_path', ''),
+                    "target_table": row.get('target_table', ''),
+                    "file_format": row.get('file_format', 'csv'),
+                    "schema_location": "",
+                    "checkpoint_location": ""
+                }
+                
+                # Parse pipeline_config for bronze
+                if row.get('pipeline_config') and pd.notna(row['pipeline_config']):
+                    try:
+                        bronze_config = json.loads(row['pipeline_config'])
+                        operations_config[operation_name].update(bronze_config)
+                    except json.JSONDecodeError:
+                        print(f"Warning: Invalid JSON in pipeline_config for bronze operation {operation_name}")
+                
+            elif pipeline_type == 'silver':
+                # Silver operation configuration
+                operations_config[operation_name] = {
+                    "bronze_table": row.get('source_path', ''),  # source_path contains bronze table for silver
+                    "target_table": row.get('target_table', ''),
+                    "keys": [],
+                    "track_history_except_column_list": [],
+                    "stored_as_scd_type": "2",
+                    "sequence_by": "_ingestion_timestamp"
+                }
+                
+                # Parse pipeline_config for silver
+                if row.get('pipeline_config') and pd.notna(row['pipeline_config']):
+                    try:
+                        silver_config = json.loads(row['pipeline_config'])
+                        operations_config[operation_name].update(silver_config)
+                    except json.JSONDecodeError:
+                        print(f"Warning: Invalid JSON in pipeline_config for silver operation {operation_name}")
+        
+        # Add operations to unified config
+        unified_config["operations_config"] = json.dumps(operations_config)
+        print(f"   🔧 Added {len(operations_config)} operations to unified pipeline")
         
         # Handle serverless vs traditional cluster configuration
         cluster_config_dict = None
@@ -115,6 +147,52 @@ class UnifiedPipelineGenerator:
         )
         
         return pipeline
+
+    def _get_unified_schedule_for_group(self, pipeline_group: str, group_rows: List[pd.Series]) -> str:
+        """Determine the unified schedule for a pipeline group based on all operations."""
+        print(f"      🔄 Determining unified schedule for {pipeline_group}")
+        
+        # Extract schedules from all operations in the group
+        schedules = []
+        for row in group_rows:
+            schedule = row.get('schedule', '')
+            if schedule and pd.notna(schedule):
+                schedules.append(schedule)
+        
+        if not schedules:
+            print(f"        📅 No schedules found, using default: 10 minutes")
+            return "10 minutes"
+        
+        # Use the fastest schedule (most frequent) to ensure all operations can complete
+        intervals = [self._parse_cron_to_interval(schedule) for schedule in schedules]
+        fastest_interval = min(intervals, key=lambda x: self._interval_to_minutes(x))
+        
+        print(f"        📅 Using fastest schedule: {fastest_interval}")
+        return fastest_interval
+    
+    def _interval_to_minutes(self, interval: str) -> int:
+        """Convert interval string to minutes for comparison."""
+        if not interval:
+            return 10  # Default
+        
+        interval_lower = interval.lower()
+        if "minute" in interval_lower:
+            try:
+                return int(interval.split()[0])
+            except:
+                return 10
+        elif "hour" in interval_lower:
+            try:
+                return int(interval.split()[0]) * 60
+            except:
+                return 60
+        elif "day" in interval_lower:
+            try:
+                return int(interval.split()[0]) * 1440
+            except:
+                return 1440
+        else:
+            return 10  # Default
 
     def _get_cluster_config(self, cluster_size: str, cluster_config: str) -> dict:
         """Generate cluster configuration for DLT pipelines based on size."""
@@ -176,21 +254,23 @@ class UnifiedPipelineGenerator:
         # Load configuration
         df = self.load_config()
         
+        # Group by pipeline_group
+        pipeline_groups = df.groupby('pipeline_group')
+        
         pipelines = []
         jobs = []
         
-        print(f"\n📊 Processing {len(df)} pipeline groups:")
-        for idx, row in df.iterrows():
-            pipeline_group = row['pipeline_group']
-            print(f"  📁 {pipeline_group}")
+        print(f"\n📊 Found {len(pipeline_groups)} pipeline groups:")
+        for group_name, group_df in pipeline_groups.items():
+            print(f"  📁 {group_name}: {len(group_df)} operations")
             
             # Create unified pipeline for this group
             try:
-                pipeline = self.create_unified_pipeline(pipeline_group, row)
+                pipeline = self.create_unified_pipeline(group_name, group_df.to_dict('records'))
                 pipelines.append(pipeline)
                 print(f"  ✅ Created unified pipeline: {pipeline.name}")
             except Exception as e:
-                print(f"  ❌ Error creating pipeline for {pipeline_group}: {e}")
+                print(f"  ❌ Error creating pipeline for {group_name}: {e}")
                 continue
         
         print(f"\n✅ Generated {len(pipelines)} unified pipelines")

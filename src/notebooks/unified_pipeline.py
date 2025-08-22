@@ -16,12 +16,12 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
 # Get pipeline configuration
-pipeline_config = json.loads(spark.conf.get("pipeline_config", "{}"))
+operations_config = json.loads(spark.conf.get("operations_config", "{}"))
 pipeline_group = spark.conf.get("pipeline_group", "default")
 
 print(f"🚀 Starting Unified Pipeline")
 print(f"📋 Pipeline Group: {pipeline_group}")
-print(f"⚙️  Configuration: {pipeline_config}")
+print(f"⚙️  Operations Configuration: {operations_config}")
 
 # COMMAND ----------
 
@@ -32,19 +32,15 @@ print("📊 Creating streaming tables for all operations...")
 bronze_tables = {}
 silver_tables = {}
 
-# Parse the unified configuration to identify all operations
-if isinstance(pipeline_config, str):
-    pipeline_config = json.loads(pipeline_config)
-
 # Extract bronze and silver operations
 bronze_operations = []
 silver_operations = []
 
-for key, value in pipeline_config.items():
-    if key.startswith("bronze_"):
-        bronze_operations.append((key, value))
-    elif key.startswith("silver_"):
-        silver_operations.append((key, value))
+for operation_name, operation_config in operations_config.items():
+    if operation_name.startswith("bronze_"):
+        bronze_operations.append((operation_name, operation_config))
+    elif operation_name.startswith("silver_"):
+        silver_operations.append((operation_name, operation_config))
 
 print(f"  📥 Found {len(bronze_operations)} bronze operations")
 print(f"  🔄 Found {len(silver_operations)} silver operations")
