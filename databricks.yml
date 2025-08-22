@@ -1,0 +1,20 @@
+bundle:
+  name: autoloader-framework-pydab
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://adb-984752964297111.11.azuredatabricks.net
+
+experimental:
+  python:
+    # Activate the virtual environment before loading resources defined in Python
+    venv_path: .venv
+    # Functions called to load resources defined in Python
+    resources:
+      - 'resources:unified_pipeline_generator:load_resources'
+    # Job mutators to modify jobs during deployment
+    mutators:
+      - 'mutators:add_email_notifications'
+      - 'mutators:add_default_cluster_config' 
