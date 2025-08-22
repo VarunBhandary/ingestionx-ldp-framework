@@ -129,14 +129,13 @@ The framework supports multiple compute options to match your performance and co
 
 ## Compute Selection Decision Matrix
 
-| Factor | Serverless | Small | Medium | Large |
-|--------|------------|-------|--------|-------|
-| **Performance Priority** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Cost Priority** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
-| **SLA Criticality** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Workload Predictability** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
-| **Setup Speed** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
-| **Resource Control** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+**🚀 Serverless**: Choose serverless when you need maximum performance and have variable workloads. It's perfect for production environments where you want Databricks to automatically optimize resources and you're willing to pay for the best performance. Use this for critical jobs where SLA is important and you want the fastest possible execution.
+
+**🔧 Small**: Choose small clusters when cost is your primary concern and you're working with predictable, light workloads. This is ideal for development, testing, and non-critical jobs where you can afford to wait a bit longer for completion. Perfect for data validation, simple reporting, and prototyping.
+
+**⚖️ Medium**: Choose medium clusters for balanced workloads that need moderate resources without breaking the bank. This is the sweet spot for standard ETL jobs, data quality checks, and team development work where you want good performance at a reasonable cost. Great for jobs that run regularly but aren't performance-critical.
+
+**🚀 Large**: Choose large clusters when you have heavy workloads that require significant resources and performance is critical. This is for complex processing, machine learning workloads, and high-throughput operations where you need maximum power and are willing to pay for it. Use this when speed is essential and you're processing large volumes of data.
 
 ## Configuration Examples
 
