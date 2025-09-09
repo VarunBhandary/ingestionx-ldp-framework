@@ -52,15 +52,15 @@ The framework uses individual `.option()` calls to ensure proper case sensitivit
 # Individual .option() calls for each Auto Loader option
 return (spark.readStream
         .format("cloudFiles")
-        .option("cloudFiles.schemaLocation", "/path/to/schema")
         .option("cloudFiles.checkpointLocation", "/path/to/checkpoint")
         .option("cloudFiles.maxFilesPerTrigger", "1")
         .option("cloudFiles.cleanSource", "MOVE")
         .option("cloudFiles.cleanSource.moveDestination", "/path/to/archive")
+        .option("cloudFiles.rescuedDataColumn", "corrupt_data")
         .option("cloudFiles.validateOptions", "true")
         .option("header", "true")
-        .option("inferSchema", "false")
         .option("cloudFiles.format", "csv")
+        .schema(schema)  # Fixed schema enforcement
         .load("/source/path"))
 ```
 
@@ -69,6 +69,25 @@ return (spark.readStream
 - ✅ **Extensibility**: Automatically picks up any new Auto Loader options
 - ✅ **Debugging**: Easy to read and troubleshoot individual options
 - ✅ **No Hardcoding**: All options come directly from TSV configuration
+
+**Schema Management**:
+The framework supports three schema strategies:
+
+1. **Fixed Schema** (Customer, Inventory demos):
+   - Schema defined inline in TSV `pipeline_config` as JSON
+   - Applied via `.schema(schema)` in Auto Loader chain
+   - Provides data validation and corrupt data handling
+   - Uses `cloudFiles.rescuedDataColumn` for mismatched data
+
+2. **Schema Inference** (Transaction demo):
+   - Uses `cloudFiles.inferSchema: true`
+   - Auto Loader automatically detects schema from data
+   - Flexible for varying data structures
+
+3. **Schema Evolution** (Shipment demo):
+   - Uses `cloudFiles.schemaEvolutionMode: rescue`
+   - Handles dynamic schema changes
+   - Captures new fields in rescued data column
 
 ### 2. Resource Generator (`resources/unified_pipeline_generator.py`)
 
@@ -389,6 +408,55 @@ databricks bundle validate --profile dev
 .option("cloudFiles.newOption", "value")
 .option("cloudFiles.anotherOption", "anotherValue")
 ```
+
+## 📋 Schema Definition Guide
+
+### Fixed Schema Configuration
+
+For pipelines requiring data validation and corrupt data handling, schemas are defined inline in the TSV configuration:
+
+```json
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {"name": "product_id", "type": "string", "nullable": false},
+      {"name": "product_name", "type": "string", "nullable": true},
+      {"name": "quantity_on_hand", "type": "integer", "nullable": true},
+      {"name": "unit_price", "type": "double", "nullable": true},
+      {"name": "last_restocked", "type": "date", "nullable": true}
+    ]
+  }
+}
+```
+
+### Schema Definition Best Practices
+
+1. **Field Naming**: Use descriptive, consistent field names (snake_case recommended)
+2. **Data Types**: Choose appropriate PySpark types (`string`, `integer`, `double`, `date`, `timestamp`)
+3. **Nullable Fields**: Set `nullable: false` for required fields, `true` for optional fields
+4. **Type Safety**: Fixed schemas provide compile-time validation and prevent data quality issues
+5. **Corrupt Data Handling**: Use `cloudFiles.rescuedDataColumn` to capture mismatched data
+
+### Supported Data Types
+
+| JSON Type | PySpark Type | Description | Example |
+|-----------|--------------|-------------|---------|
+| `string` | StringType | Text data | `"product_name"` |
+| `integer` | IntegerType | Whole numbers | `123` |
+| `long` | LongType | Large integers | `1234567890` |
+| `double` | DoubleType | Decimal numbers | `99.99` |
+| `float` | FloatType | Single precision decimals | `99.9` |
+| `boolean` | BooleanType | True/false values | `true` |
+| `date` | DateType | Date values | `"2024-01-15"` |
+| `timestamp` | TimestampType | Date and time values | `"2024-01-15 10:30:00"` |
+
+### Schema Validation Features
+
+- **Type Validation**: Ensures data matches expected types
+- **Nullability Enforcement**: Validates required vs optional fields
+- **Corrupt Data Rescue**: Captures data that doesn't match schema in `rescuedDataColumn`
+- **Data Quality**: Prevents downstream processing issues
 
 ## 🔧 Configuration Extensions
 

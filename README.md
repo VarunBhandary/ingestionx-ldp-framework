@@ -15,14 +15,15 @@ This framework provides a unified approach to data pipeline management in Databr
 
 The framework includes comprehensive demo scenarios that showcase real-world Auto Loader use cases:
 
-### **1. Customer Data Demo (SCD Type 2)**
+### **1. Customer Data Demo (Fixed Schema + SCD Type 2)**
 - **Scenario**: Incremental customer data updates with full history tracking
 - **Format**: CSV files with incremental changes
 - **Features**: 
-  - Schema inference with `cloudFiles.inferSchema: true`
+  - **Fixed schema enforcement** with inline schema definition in TSV config
+  - **Corrupt data handling** with `cloudFiles.rescuedDataColumn`
   - SCD Type 2 implementation in silver layer
   - Historical change tracking for customer attributes
-- **Auto Loader Options**: Schema location, checkpoint location, max files per trigger
+- **Auto Loader Options**: Fixed schema, rescued data column, checkpoint location, max files per trigger
 
 ### **2. Transaction Data Demo (SCD Type 1)**
 - **Scenario**: Transaction data with soft delete flags
@@ -37,12 +38,12 @@ The framework includes comprehensive demo scenarios that showcase real-world Aut
 - **Scenario**: Daily inventory files with fixed schema and immediate archive management
 - **Format**: CSV files with strict schema requirements
 - **Features**:
-  - **Fixed schema enforcement** with predefined schema file
+  - **Fixed schema enforcement** with inline schema definition in TSV config
   - **Immediate file archiving** using `cloudFiles.cleanSource: move`
   - **Corrupt data handling** with `cloudFiles.rescuedDataColumn`
   - **Schema validation** to ensure data quality
   - **Single file processing** with `maxFilesPerTrigger: 1` for immediate archiving
-- **Auto Loader Options**: Clean source move, rescued data column, schema validation
+- **Auto Loader Options**: Fixed schema, clean source move, rescued data column, schema validation
 
 ### **4. Shipment Data Demo (File Notification Mode)**
 - **Scenario**: Real-time shipment tracking with evolving schema
@@ -401,32 +402,82 @@ The demo showcases key [Auto Loader options](https://learn.microsoft.com/en-us/a
 
 | Option | Purpose | Demo Usage | Example Path |
 |--------|---------|------------|--------------|
-| `cloudFiles.schemaLocation` | Schema tracking and evolution | All demos - separate schema directories | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/schema/{demo}` |
 | `cloudFiles.checkpointLocation` | Processing state tracking | All demos - separate checkpoint directories | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/checkpoint/{demo}` |
 | `cloudFiles.maxFilesPerTrigger` | Batch size control | Customer: 100, Transaction: 50, Inventory: 1, Shipment: 100 | N/A |
 | `cloudFiles.allowOverwrites` | File overwrite handling | All demos: false (safety) | N/A |
 | `cloudFiles.cleanSource` | Immediate file archiving | Inventory demo: "move" | N/A |
 | `cloudFiles.cleanSource.moveDestination` | Archive destination | Inventory demo | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/archive/inventory` |
-| `cloudFiles.rescuedDataColumn` | Corrupt data handling | Inventory demo: "corrupt_data" | N/A |
+| `cloudFiles.rescuedDataColumn` | Corrupt data handling | Customer, Inventory demos: "corrupt_data" | N/A |
 | `cloudFiles.useManagedFileEvents` | File notification mode | Shipment demo only | N/A |
 | `cloudFiles.schemaEvolutionMode` | Schema change handling | Shipment demo: "rescue" | N/A |
 | `multiline` | JSON multiline support | Shipment demo: true (for nested objects) | N/A |
 | `cloudFiles.validateOptions` | Option validation | All demos: false (temporary) | N/A |
+| `.schema(schema)` | Fixed schema enforcement | Customer, Inventory demos | Inline schema definition |
 
 ### **File Format Options**
 
 | Format | Demo | Options Used |
 |--------|------|--------------|
-| **CSV** | Customer, Transaction, Inventory | `header: true`, `inferSchema: true` |
+| **CSV** | Customer, Inventory | `header: true`, `.schema(schema)` (fixed schema) |
+| **CSV** | Transaction | `header: true`, `inferSchema: true` |
 | **JSON** | Shipment | `multiline: true`, `cloudFiles.schemaEvolutionMode: rescue` |
 
-### **Schema Management**
+### **Schema Management Strategies**
 
-| Strategy | Demo | Implementation |
-|----------|------|----------------|
-| **Schema Inference** | Customer, Transaction | `cloudFiles.inferSchema: true` |
-| **Fixed Schema** | Inventory | Predefined schema file with validation |
-| **Schema Evolution** | Shipment | `cloudFiles.schemaEvolutionMode: rescue` |
+| Strategy | Demo | Implementation | Benefits |
+|----------|------|----------------|----------|
+| **Fixed Schema** | Customer, Inventory | Inline schema in TSV config + `.schema(schema)` | Data validation, corrupt data handling, type safety |
+| **Schema Inference** | Transaction | `cloudFiles.inferSchema: true` | Automatic schema detection, flexible data structure |
+| **Schema Evolution** | Shipment | `cloudFiles.schemaEvolutionMode: rescue` | Dynamic schema changes, new field handling |
+
+## 📋 **Schema Definition Guide**
+
+### **Fixed Schema Configuration**
+
+For demos requiring data validation and corrupt data handling, schemas are defined inline in the TSV configuration:
+
+```json
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {"name": "product_id", "type": "string", "nullable": false},
+      {"name": "product_name", "type": "string", "nullable": true},
+      {"name": "quantity_on_hand", "type": "integer", "nullable": true},
+      {"name": "unit_price", "type": "double", "nullable": true},
+      {"name": "last_restocked", "type": "date", "nullable": true}
+    ]
+  }
+}
+```
+
+### **Schema Definition Best Practices**
+
+1. **Field Naming**: Use descriptive, consistent field names (snake_case recommended)
+2. **Data Types**: Choose appropriate PySpark types (`string`, `integer`, `double`, `date`, `timestamp`)
+3. **Nullable Fields**: Set `nullable: false` for required fields, `true` for optional fields
+4. **Type Safety**: Fixed schemas provide compile-time validation and prevent data quality issues
+5. **Corrupt Data Handling**: Use `cloudFiles.rescuedDataColumn` to capture mismatched data
+
+### **Supported Data Types**
+
+| JSON Type | PySpark Type | Description | Example |
+|-----------|--------------|-------------|---------|
+| `string` | StringType | Text data | `"product_name"` |
+| `integer` | IntegerType | Whole numbers | `123` |
+| `long` | LongType | Large integers | `1234567890` |
+| `double` | DoubleType | Decimal numbers | `99.99` |
+| `float` | FloatType | Single precision decimals | `99.9` |
+| `boolean` | BooleanType | True/false values | `true` |
+| `date` | DateType | Date values | `"2024-01-15"` |
+| `timestamp` | TimestampType | Date and time values | `"2024-01-15 10:30:00"` |
+
+### **Schema Validation Features**
+
+- **Type Validation**: Ensures data matches expected types
+- **Nullability Enforcement**: Validates required vs optional fields
+- **Corrupt Data Rescue**: Captures data that doesn't match schema in `rescuedDataColumn`
+- **Data Quality**: Prevents downstream processing issues
 
 ## 📊 **Demo Data Scenarios**
 
@@ -438,7 +489,8 @@ customer_batch2 = generate_customer_data(batch_number=2, num_customers=30, inclu
 ```
 
 **What to Observe:**
-- Schema inference from first batch
+- Fixed schema enforcement with data validation
+- Corrupt data handling in `rescuedDataColumn`
 - Historical tracking in silver layer
 - SCD Type 2 implementation with effective dates
 
@@ -450,6 +502,7 @@ transaction_batch2 = generate_transaction_data(batch_number=2, num_transactions=
 ```
 
 **What to Observe:**
+- Schema inference from data structure
 - Real-time transaction processing
 - Soft delete handling with `is_deleted` flag
 - SCD Type 1 implementation (overwrite changes)
