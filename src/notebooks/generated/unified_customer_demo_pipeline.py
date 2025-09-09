@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Unified Pipeline - Product Pipeline
+# MAGIC # Unified Pipeline - Customer Demo Pipeline
 # MAGIC 
-# MAGIC This notebook implements a unified pipeline for product_pipeline with:
+# MAGIC This notebook implements a unified pipeline for customer_demo_pipeline with:
 # MAGIC - Bronze Layer: File ingestion using Autoloader
 # MAGIC - Silver Layer: SCD Type 2 transformations using Auto CDC
 # MAGIC 
@@ -21,26 +21,28 @@ from pyspark.sql.functions import *
 # COMMAND ----------
 
 @dlt.table(
-    name="vbdemos.adls_bronze.products_new",
+    name="vbdemos.adls_bronze.customers_demo",
     table_properties={
         "quality": "bronze",
-        "operation": "bronze_products",
+        "operation": "bronze_customers_demo",
         "pipelines.autoOptimize.optimizeWrite": "true",
         "pipelines.autoOptimize.autoCompact": "true",
         "delta.enableChangeDataFeed": "true"
     }
 )
-def products_new():
+def customers_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .option("cloudFiles.schemaLocation", "abfss://aaboode@oneenvadls.dfs.core.windows.net/astellas/checkpoint/products/schema")
-            .option("cloudFiles.maxFilesPerTrigger", "200")
-            .option("cloudFiles.allowOverwrites", "false")
             .option("cloudFiles.format", "csv")
             .option("header", "true")
             .option("inferSchema", "true")
-            .load("abfss://aaboode@oneenvadls.dfs.core.windows.net/astellas/csv/products")
+            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers")
+            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers")
+            .option("cloudFiles.maxFilesPerTrigger", "100")
+            .option("cloudFiles.allowOverwrites", "false")
+            .option("cloudFiles.validateOptions", "false")
+            .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
 
@@ -53,23 +55,23 @@ def products_new():
 # COMMAND ----------
 
 # Create the target streaming table
-dlt.create_streaming_table("vbdemos.adls_silver.products_scd2")
+dlt.create_streaming_table("vbdemos.adls_silver.customers_demo_scd2")
 
 # COMMAND ----------
 
 @dlt.view
-def bronze_products_scd2_source():
-    return spark.readStream.table("vbdemos.adls_bronze.products_new")
+def bronze_customers_demo_scd2_source():
+    return spark.readStream.table("vbdemos.adls_bronze.customers_demo")
 
 # COMMAND ----------
 
 # Create Auto CDC flow for SCD Type 2
 dlt.create_auto_cdc_flow(
-    target="vbdemos.adls_silver.products_scd2",
-    source="bronze_products_scd2_source",
-    keys=["product_id"],
-    sequence_by="created_date",
-    except_column_list=["product_name", "category", "price", "brand", "description", "stock_quantity", "created_date", "last_updated"],
+    target="vbdemos.adls_silver.customers_demo_scd2",
+    source="bronze_customers_demo_scd2_source",
+    keys=["customer_id"],
+    sequence_by="update_ts",
+    except_column_list=["first_name", "last_name", "email", "phone_number", "address", "city", "state", "zip_code", "country", "customer_tier"],
     stored_as_scd_type="2"
 )
 

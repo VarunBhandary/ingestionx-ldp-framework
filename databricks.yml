@@ -4,6 +4,7 @@ bundle:
 targets:
   dev:
     default: true
+    mode: development
     workspace:
       host: https://adb-984752964297111.11.azuredatabricks.net
 
@@ -17,4 +18,6 @@ experimental:
     # No mutators needed for pipelines - they are self-contained
     # mutators:
     #   - 'mutators:add_email_notifications'
-    #   - 'mutators:add_default_cluster_config' 
+    #   - 'mutators:add_default_cluster_config'
+
+ 

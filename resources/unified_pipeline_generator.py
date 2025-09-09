@@ -27,14 +27,14 @@ class UnifiedPipelineGenerator:
             raise FileNotFoundError(f"Configuration file {self.config_file} not found")
 
         df = pd.read_csv(self.config_file, sep='\t')
-        print(f"📋 Loaded {len(df)} pipeline configurations")
+        print(f"Loaded {len(df)} pipeline configurations")
         return df
 
     def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
         """Create a unified pipeline for a pipeline group using static generated notebooks"""
         
-        print(f"🔧 Creating unified pipeline for group: {pipeline_group}")
-        print(f"   📊 Operations in group: {len(group_rows)}")
+        print(f"Creating unified pipeline for group: {pipeline_group}")
+        print(f"   Operations in group: {len(group_rows)}")
         
         # Find the appropriate generated notebook for this pipeline group
         notebook_path = f"src/notebooks/generated/unified_{pipeline_group}.py"
@@ -85,7 +85,7 @@ class UnifiedPipelineGenerator:
                 try:
                     pipeline_specific_config = json.loads(row['pipeline_config'])
                     operation_type = row.get('operation_type')
-                    print(f"   🔧 Extracted {operation_type} pipeline config: {pipeline_specific_config}")
+                    print(f"   Extracted {operation_type} pipeline config: {pipeline_specific_config}")
                     
                     # Merge SCD2 and other pipeline-specific settings
                     for key, value in pipeline_specific_config.items():
@@ -98,16 +98,16 @@ class UnifiedPipelineGenerator:
                             print(f"      + Added {operation_type} config: {key} = {unified_config[key]}")
                     
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"      ⚠️  Error parsing {operation_type} pipeline config: {e}")
+                    print(f"      Warning: Error parsing {operation_type} pipeline config: {e}")
                     continue
         
-        print(f"   📋 Full unified config: {unified_config}")
+        print(f"   Full unified config: {unified_config}")
         
         # Force all pipelines to serverless for quick testing
         is_serverless = True
         cluster_config_dict = None
         
-        print(f"   🚀 Applied serverless config: Databricks will handle compute automatically")
+        print(f"   Applied serverless config: Databricks will handle compute automatically")
         
         # Determine the correct schema for this pipeline (should be silver schema)
         target_schema = "adls_bronze"  # Default fallback
@@ -119,15 +119,31 @@ class UnifiedPipelineGenerator:
                     parts = target_table.split('.')
                     if len(parts) >= 2:
                         target_schema = parts[1]  # Get the schema part
-                        print(f"   🎯 Using target schema: {target_schema} (from {target_table})")
+                        print(f"   Using target schema: {target_schema} (from {target_table})")
                         break
+        
+        # Extract catalog from target table names
+        target_tables = [row.get('target_table', '') for row in group_rows if row.get('target_table')]
+        
+        try:
+            from config.environment_config import get_catalog_for_pipeline
+            catalog = get_catalog_for_pipeline(target_tables)
+            print(f"   Using catalog: {catalog} (extracted from target tables)")
+        except ImportError:
+            # Fallback: extract from first target table
+            if target_tables and '.' in target_tables[0]:
+                catalog = target_tables[0].split('.')[0]
+                print(f"   Using catalog: {catalog} (fallback extraction)")
+            else:
+                catalog = "hive_metastore"  # Safe default
+                print(f"   Using default catalog: {catalog}")
         
         # Create the unified pipeline with a resource name for referencing
         pipeline = Pipeline(
             name=f"unified_{pipeline_group}",
             libraries=[pipeline_library],
             configuration=unified_config,
-            catalog="vbdemos",  # Default catalog
+            catalog=catalog,  # Use catalog from configuration
             schema=target_schema,  # Use the correct schema (silver, not bronze)
             tags={
                 "deployment_type": "unified_framework",
@@ -146,7 +162,7 @@ class UnifiedPipelineGenerator:
         # Set the resource name for referencing in jobs
         pipeline.resource_name = f"unified_{pipeline_group}_pipeline"
         
-        print(f"   🎯 Created pipeline '{pipeline.name}' with configuration:")
+        print(f"   Created pipeline '{pipeline.name}' with configuration:")
         print(f"      - Trigger interval: {unified_config.get('pipelines.trigger.interval', 'Not set')}")
         print(f"      - Continuous mode: {pipeline.continuous}")
         print(f"      - Serverless: {pipeline.serverless}")
@@ -156,7 +172,7 @@ class UnifiedPipelineGenerator:
     def create_manual_job(self, pipeline_group: str, group_rows: List[dict]) -> Job:
         """Create a manual job with notebook tasks based on TSV configuration."""
         
-        print(f"   🔧 Creating manual job for group: {pipeline_group}")
+        print(f"   Creating manual job for group: {pipeline_group}")
         
         # Get the Quartz cron schedule directly from the TSV config
         cron_schedule = self._get_quartz_cron_for_group(pipeline_group, group_rows)
@@ -184,7 +200,7 @@ class UnifiedPipelineGenerator:
         for i, manual_op in enumerate(manual_operations):
             notebook_path = manual_op.get('source_path', '')
             if not notebook_path:
-                print(f"      ⚠️  Skipping manual operation {i}: no notebook path specified")
+                print(f"      Warning: Skipping manual operation {i}: no notebook path specified")
                 continue
             
             # Create notebook task
@@ -206,15 +222,15 @@ class UnifiedPipelineGenerator:
             # Add dependency if this is not the first task
             if previous_task_key:
                 task.depends_on = [{"task_key": previous_task_key}]
-                print(f"      🔗 Added manual notebook task: {notebook_path} (depends on {previous_task_key})")
+                print(f"      Added manual notebook task: {notebook_path} (depends on {previous_task_key})")
             else:
-                print(f"      🚀 Added manual notebook task: {notebook_path} (first task)")
+                print(f"      Added manual notebook task: {notebook_path} (first task)")
             
             tasks.append(task)
             previous_task_key = task_key
         
         if not tasks:
-            print(f"      ❌ No valid manual operations found for {pipeline_group}")
+            print(f"      Error: No valid manual operations found for {pipeline_group}")
             return None
         
         # Create the job with all tasks
@@ -237,10 +253,10 @@ class UnifiedPipelineGenerator:
         # Apply notification configuration if specified
         if notification_config:
             job.email_notifications = notification_config
-            print(f"      📧 Applied notifications: {notification_config}")
+            print(f"      Applied notifications: {notification_config}")
         
-        print(f"      ⏰ Applied cron schedule: {cron_schedule}")
-        print(f"      🎯 Job will run {len(tasks)} manual notebook tasks")
+        print(f"      Applied cron schedule: {cron_schedule}")
+        print(f"      Job will run {len(tasks)} manual notebook tasks")
         
         # Set the resource name for the job
         job.resource_name = f"manual_{pipeline_group}_job"
@@ -250,7 +266,7 @@ class UnifiedPipelineGenerator:
     def create_scheduled_job(self, pipeline_group: str, pipeline: Pipeline, group_rows: List[dict]) -> Job:
         """Create a scheduled job that runs the pipeline based on TSV cron configuration."""
         
-        print(f"   🔧 Creating scheduled job for pipeline: {pipeline.name}")
+        print(f"   Creating scheduled job for pipeline: {pipeline.name}")
         
         # Get the Quartz cron schedule directly from the TSV config
         cron_schedule = self._get_quartz_cron_for_group(pipeline_group, group_rows)
@@ -288,7 +304,7 @@ class UnifiedPipelineGenerator:
                     run_if="ALL_SUCCESS"  # Run after pipeline task succeeds
                 )
                 tasks.append(gold_task)
-                print(f"      🏆 Added gold notebook task: {notebook_path} (depends on pipeline_task_{pipeline_group})")
+                print(f"      Added gold notebook task: {notebook_path} (depends on pipeline_task_{pipeline_group})")
         
         # Create the job with all tasks
         job = Job(
@@ -310,10 +326,10 @@ class UnifiedPipelineGenerator:
         # Apply notification configuration if specified
         if notification_config:
             job.email_notifications = notification_config
-            print(f"      📧 Applied notifications: {notification_config}")
+            print(f"      Applied notifications: {notification_config}")
         
-        print(f"      ⏰ Applied cron schedule: {cron_schedule}")
-        print(f"      🎯 Job will run pipeline: {pipeline.name}")
+        print(f"      Applied cron schedule: {cron_schedule}")
+        print(f"      Job will run pipeline: {pipeline.name}")
         
         # Set the resource name for the job
         job.resource_name = f"unified_{pipeline_group}_job"
@@ -328,7 +344,7 @@ class UnifiedPipelineGenerator:
             if row.get('operation_type') == 'silver':
                 schedule = row.get('schedule', '')
                 if schedule and pd.notna(schedule):
-                    print(f"      📅 Found Quartz cron schedule: '{schedule}'")
+                    print(f"      Found Quartz cron schedule: '{schedule}'")
                     return schedule
         
         # Look for manual operations to get the schedule
@@ -336,12 +352,12 @@ class UnifiedPipelineGenerator:
             if row.get('operation_type') == 'manual':
                 schedule = row.get('schedule', '')
                 if schedule and pd.notna(schedule):
-                    print(f"      📅 Found Quartz cron schedule: '{schedule}'")
+                    print(f"      Found Quartz cron schedule: '{schedule}'")
                     return schedule
         
         # Fallback to default schedule if none found
         default_schedule = "0 0 6 * * ?"  # Daily at 6 AM in Quartz syntax
-        print(f"      ⚠️  No schedule found, using default: '{default_schedule}'")
+        print(f"      Warning: No schedule found, using default: '{default_schedule}'")
         return default_schedule
 
     def _get_notification_config_for_group(self, pipeline_group: str, group_rows: List[dict]) -> JobEmailNotifications:
@@ -354,7 +370,7 @@ class UnifiedPipelineGenerator:
                 if notifications and pd.notna(notifications):
                     try:
                         notification_data = json.loads(notifications)
-                        print(f"      📧 Found notification config: {notification_data}")
+                        print(f"      Found notification config: {notification_data}")
                         
                         # Create JobEmailNotifications object
                         recipients = notification_data.get('recipients', [])
@@ -366,7 +382,7 @@ class UnifiedPipelineGenerator:
                         return email_notifications
                         
                     except (json.JSONDecodeError, TypeError) as e:
-                        print(f"      ⚠️  Error parsing notification config: {e}")
+                        print(f"      Warning: Error parsing notification config: {e}")
                         break
         
         # Look for manual operations to get the notification config
@@ -376,7 +392,7 @@ class UnifiedPipelineGenerator:
                 if notifications and pd.notna(notifications):
                     try:
                         notification_data = json.loads(notifications)
-                        print(f"      📧 Found notification config: {notification_data}")
+                        print(f"      Found notification config: {notification_data}")
                         
                         # Create JobEmailNotifications object
                         recipients = notification_data.get('recipients', [])
@@ -388,18 +404,18 @@ class UnifiedPipelineGenerator:
                         return email_notifications
                         
                     except (json.JSONDecodeError, TypeError) as e:
-                        print(f"      ⚠️  Error parsing notification config: {e}")
+                        print(f"      Warning: Error parsing notification config: {e}")
                         break
         
         # Return None if no valid notification config found
-        print(f"      📧 No notification config found, using defaults")
+        print(f"      No notification config found, using defaults")
         return None
 
     # Removed _convert_to_quartz_cron method - now using Quartz cron directly in TSV config
 
     def _get_unified_schedule_for_group(self, pipeline_group: str, group_rows: List[pd.Series]) -> str:
         """Determine the unified schedule for a pipeline group based on all operations."""
-        print(f"      🔄 Determining unified schedule for {pipeline_group}")
+        print(f"      Determining unified schedule for {pipeline_group}")
         
         # Extract schedules from all operations in the group
         schedules = []
@@ -407,17 +423,17 @@ class UnifiedPipelineGenerator:
             schedule = row.get('schedule', '')
             if schedule and pd.notna(schedule):
                 schedules.append(schedule)
-                print(f"        📅 Found schedule: '{schedule}'")
+                print(f"        Found schedule: '{schedule}'")
         
         if not schedules:
-            print(f"        📅 No schedules found, using default: 10 minutes")
+            print(f"        No schedules found, using default: 10 minutes")
             return "10 minutes"
         
         # Use the fastest schedule (most frequent) to ensure all operations can complete
         intervals = [self._parse_cron_to_interval(schedule) for schedule in schedules]
         fastest_interval = min(intervals, key=lambda x: self._interval_to_minutes(x))
         
-        print(f"        📅 Using fastest schedule: {fastest_interval}")
+        print(f"        Using fastest schedule: {fastest_interval}")
         return fastest_interval
     
     def _interval_to_minutes(self, interval: str) -> int:
@@ -477,7 +493,7 @@ class UnifiedPipelineGenerator:
         
         # Clean the cron expression
         cron_expr = cron_expression.strip()
-        print(f"        🔍 Parsing cron expression: '{cron_expr}'")
+        print(f"        Parsing cron expression: '{cron_expr}'")
         
         # Common cron patterns and their corresponding intervals
         cron_patterns = {
@@ -538,7 +554,7 @@ class UnifiedPipelineGenerator:
         # Try exact match first
         if cron_expr in cron_patterns:
             result = cron_patterns[cron_expr]
-            print(f"        ⏰ Exact match: '{cron_expr}' → '{result}'")
+            print(f"        Exact match: '{cron_expr}' → '{result}'")
             return result
         
         # Try to parse more complex cron expressions
@@ -553,19 +569,19 @@ class UnifiedPipelineGenerator:
                         interval_val = int(interval)
                         if interval_val <= 60:
                             result = f"{interval_val} minutes"
-                            print(f"        ⏰ Parsed interval: '{cron_expr}' → '{result}'")
+                            print(f"        Parsed interval: '{cron_expr}' → '{result}'")
                             return result
         except Exception as e:
-            print(f"        ⚠️  Error parsing cron expression '{cron_expr}': {e}")
+            print(f"        Warning: Error parsing cron expression '{cron_expr}': {e}")
         
         # Fallback to default
         result = "10 minutes"
-        print(f"        ⚠️  No match found for '{cron_expr}', using default: '{result}'")
+        print(f"        Warning: No match found for '{cron_expr}', using default: '{result}'")
         return result
 
     def generate_resources(self) -> tuple[List[Pipeline], List[Job]]:
         """Generate unified DLT pipelines and scheduled jobs from configuration."""
-        print("🚀 Generating unified pipeline resources...")
+        print("Generating unified pipeline resources...")
         
         # Load configuration
         df = self.load_config()
@@ -576,7 +592,7 @@ class UnifiedPipelineGenerator:
         pipelines = []
         jobs = []
         
-        print(f"\n📊 Found {len(pipeline_groups)} pipeline groups:")
+        print(f"\nFound {len(pipeline_groups)} pipeline groups:")
         
         # First pass: Create all pipelines (only for non-manual groups)
         pipeline_map = {}  # Map pipeline_group -> pipeline object
@@ -591,7 +607,7 @@ class UnifiedPipelineGenerator:
             
             if all(op_type == 'manual' for op_type in operation_types):
                 # This is a manual-only group - no pipeline needed
-                print(f"  🔧 {group_name}: Manual-only group (no DLT pipeline)")
+                print(f"  {group_name}: Manual-only group (no DLT pipeline)")
                 manual_groups.append(group_name)
                 continue
             
@@ -599,27 +615,27 @@ class UnifiedPipelineGenerator:
                 pipeline = self.create_unified_pipeline(group_name, group_operations)
                 pipelines.append(pipeline)
                 pipeline_map[group_name] = pipeline
-                print(f"  ✅ Created unified pipeline: {pipeline.name}")
+                print(f"  Created unified pipeline: {pipeline.name}")
                 
             except Exception as e:
-                print(f"  ❌ Error creating pipeline for {group_name}: {e}")
+                print(f"  Error creating pipeline for {group_name}: {e}")
                 continue
         
         # Second pass: Create jobs for DLT pipelines
-        print(f"\n🔧 Creating scheduled jobs for {len(pipeline_map)} DLT pipelines...")
+        print(f"\nCreating scheduled jobs for {len(pipeline_map)} DLT pipelines...")
         for group_name, pipeline in pipeline_map.items():
             try:
                 # Create scheduled job for this pipeline
                 job = self.create_scheduled_job(group_name, pipeline, df[df['pipeline_group'] == group_name].to_dict('records'))
                 jobs.append(job)
-                print(f"  ✅ Created scheduled job: {job.name}")
+                print(f"  Created scheduled job: {job.name}")
                 
             except Exception as e:
-                print(f"  ❌ Error creating job for {group_name}: {e}")
+                print(f"  Error creating job for {group_name}: {e}")
                 continue
         
         # Third pass: Create manual jobs
-        print(f"\n🔧 Creating manual jobs for {len(manual_groups)} manual groups...")
+        print(f"\nCreating manual jobs for {len(manual_groups)} manual groups...")
         for group_name in manual_groups:
             try:
                 # Create manual job for this group
@@ -627,15 +643,15 @@ class UnifiedPipelineGenerator:
                 job = self.create_manual_job(group_name, group_rows)
                 if job:
                     jobs.append(job)
-                    print(f"  ✅ Created manual job: {job.name}")
+                    print(f"  Created manual job: {job.name}")
                 else:
-                    print(f"  ⚠️  No valid manual job created for {group_name}")
+                    print(f"  Warning: No valid manual job created for {group_name}")
                 
             except Exception as e:
-                print(f"  ❌ Error creating manual job for {group_name}: {e}")
+                print(f"  Error creating manual job for {group_name}: {e}")
                 continue
         
-        print(f"\n✅ Generated {len(pipelines)} unified pipelines and {len(jobs)} scheduled jobs")
+        print(f"\nGenerated {len(pipelines)} unified pipelines and {len(jobs)} scheduled jobs")
         return pipelines, jobs
 
 
@@ -643,7 +659,7 @@ def load_resources(bundle: Bundle) -> Resources:
     """Load unified pipeline resources from configuration."""
     from databricks.bundles.core import Resources
     
-    print("🚀 Loading unified pipeline resources...")
+    print("Loading unified pipeline resources...")
     
     # Create new resources object
     resources = Resources()
@@ -652,7 +668,7 @@ def load_resources(bundle: Bundle) -> Resources:
     generator = UnifiedPipelineGenerator(bundle)
     pipelines, jobs = generator.generate_resources()
     
-    print(f"\n📦 Adding resources to bundle:")
+    print(f"\nAdding resources to bundle:")
     
     # Add pipelines to resources using their resource names
     for pipeline in pipelines:
@@ -666,6 +682,6 @@ def load_resources(bundle: Bundle) -> Resources:
         print(f"  + Job: {job.name} (resource: {resource_name})")
         resources.add_job(resource_name, job)
     
-    print(f"\n🎯 Total resources loaded: {len(pipelines)} pipelines + {len(jobs)} jobs = {len(pipelines) + len(jobs)} total")
+    print(f"\nTotal resources loaded: {len(pipelines)} pipelines + {len(jobs)} jobs = {len(pipelines) + len(jobs)} total")
     
     return resources
