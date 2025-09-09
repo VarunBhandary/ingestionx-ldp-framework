@@ -12,6 +12,7 @@
 
 import dlt
 from pyspark.sql.functions import *
+from pyspark.sql.types import *
 
 # COMMAND ----------
 
@@ -19,6 +20,8 @@ from pyspark.sql.functions import *
 
 
 # COMMAND ----------
+# Define fixed schema for data validation
+schema = StructType([StructField('product_id', StringType(), False), StructField('product_name', StringType(), True), StructField('category', StringType(), True), StructField('brand', StringType(), True), StructField('sku', StringType(), True), StructField('quantity_on_hand', IntegerType(), True), StructField('quantity_reserved', IntegerType(), True), StructField('unit_cost', DoubleType(), True), StructField('unit_price', DoubleType(), True), StructField('warehouse_location', StringType(), True), StructField('last_restocked', DateType(), True), StructField('reorder_level', IntegerType(), True), StructField('supplier_id', StringType(), True), StructField('batch_date', StringType(), True), StructField('created_ts', TimestampType(), True)])
 
 @dlt.table(
     name="vbdemos.adls_bronze.inventory_demo",
@@ -34,17 +37,16 @@ def inventory_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/inventory")
             .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/inventory")
             .option("cloudFiles.maxFilesPerTrigger", "1")
             .option("cloudFiles.allowOverwrites", "false")
             .option("header", "true")
-            .option("inferSchema", "false")
             .option("cloudFiles.cleanSource", "MOVE")
             .option("cloudFiles.cleanSource.moveDestination", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/archive/inventory")
             .option("cloudFiles.rescuedDataColumn", "corrupt_data")
             .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
+            .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))

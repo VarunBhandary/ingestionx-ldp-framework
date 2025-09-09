@@ -12,6 +12,7 @@
 
 import dlt
 from pyspark.sql.functions import *
+from pyspark.sql.types import *
 
 # COMMAND ----------
 
@@ -19,6 +20,8 @@ from pyspark.sql.functions import *
 
 
 # COMMAND ----------
+# Define fixed schema for data validation
+schema = StructType([StructField('customer_id', StringType(), False), StructField('first_name', StringType(), True), StructField('last_name', StringType(), True), StructField('email', StringType(), True), StructField('phone_number', StringType(), True), StructField('address', StringType(), True), StructField('city', StringType(), True), StructField('state', StringType(), True), StructField('zip_code', StringType(), True), StructField('country', StringType(), True), StructField('customer_tier', StringType(), True), StructField('registration_date', DateType(), True), StructField('update_ts', TimestampType(), True)])
 
 @dlt.table(
     name="vbdemos.adls_bronze.customers_demo",
@@ -34,14 +37,14 @@ def customers_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers")
             .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers")
             .option("cloudFiles.maxFilesPerTrigger", "100")
             .option("cloudFiles.allowOverwrites", "false")
             .option("header", "true")
-            .option("inferSchema", "true")
+            .option("cloudFiles.rescuedDataColumn", "corrupt_data")
             .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
+            .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))

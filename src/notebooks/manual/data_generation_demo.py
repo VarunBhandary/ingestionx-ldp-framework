@@ -71,10 +71,10 @@ print("   • generate_shipment_data() - Shipment data with schema evolution")
 print("   • cleanup_generated_data() - Reset all demo data")
 
 # Configuration - Using Databricks Volumes
-# Note: Replace 'your_catalog' and 'your_schema' with your actual catalog and schema names
-CATALOG = "main"  # Change this to your catalog name
-SCHEMA = "default"  # Change this to your schema name
-VOLUME_NAME = "autoloader_demo"
+# Note: These should match the paths in your TSV configuration file
+CATALOG = "vbdemos"  # Change this to your catalog name
+SCHEMA = "dbdemos_autoloader"  # Change this to your schema name
+VOLUME_NAME = "raw_data"
 
 # Volume paths
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME_NAME}"
@@ -95,20 +95,19 @@ try:
     dbutils.fs.mkdirs(INVENTORY_PATH)
     dbutils.fs.mkdirs(SHIPMENT_PATH)
     
-    # Create schema and checkpoint directories for Auto Loader
-    # Using clean, organized directory structure based on best practices
-    
-    # Schema directories (separate from checkpoints for better organization)
-    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/customers")
-    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/transactions")
-    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/inventory")
-    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/shipments")
+    # Create checkpoint directories for Auto Loader state tracking
+    # Note: Schema directories are not needed for fixed schema demos (customer, inventory)
+    # as they use inline schemas defined in the TSV configuration
     
     # Checkpoint directories (for Auto Loader state tracking)
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/customers")
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/transactions")
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/inventory")
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/shipments")
+    
+    # Schema directories (only needed for schema inference demos)
+    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/transactions")
+    dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/shipments")
     
     # Archive directory for inventory demo
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/archive/inventory")
@@ -119,26 +118,23 @@ try:
     print(f"   • Transaction data: {TRANSACTION_PATH}")
     print(f"   • Inventory data: {INVENTORY_PATH}")
     print(f"   • Shipment data: {SHIPMENT_PATH}")
-    print(f"📋 Schema directories (for Auto Loader schema tracking):")
-    print(f"   • {VOLUME_PATH}/schema/customers")
-    print(f"   • {VOLUME_PATH}/schema/transactions")
-    print(f"   • {VOLUME_PATH}/schema/inventory")
-    print(f"   • {VOLUME_PATH}/schema/shipments")
     print(f"🔄 Checkpoint directories (for Auto Loader state tracking):")
     print(f"   • {VOLUME_PATH}/checkpoint/customers")
     print(f"   • {VOLUME_PATH}/checkpoint/transactions")
     print(f"   • {VOLUME_PATH}/checkpoint/inventory")
     print(f"   • {VOLUME_PATH}/checkpoint/shipments")
+    print(f"📋 Schema directories (for schema inference demos only):")
+    print(f"   • {VOLUME_PATH}/schema/transactions")
+    print(f"   • {VOLUME_PATH}/schema/shipments")
     print(f"📦 Archive directory:")
     print(f"   • {VOLUME_PATH}/archive/inventory")
     
-    # Note: Schema directories are created for all demos
-    # Each demo uses different schema strategies:
-    print(f"Schema Strategy:")
-    print(f"   • Customer Demo: inferSchema=true (Auto Loader will infer schema)")
-    print(f"   • Transaction Demo: inferSchema=true (Auto Loader will infer schema)")
-    print(f"   • Inventory Demo: Fixed schema (enforced schema with corrupt data handling)")
-    print(f"   • Shipment Demo: schemaEvolutionMode=rescue (Schema will evolve dynamically)")
+    # Schema strategies for each demo:
+    print(f"\nSchema Strategy:")
+    print(f"   • Customer Demo: Fixed schema (inline in TSV config)")
+    print(f"   • Inventory Demo: Fixed schema (inline in TSV config)")
+    print(f"   • Transaction Demo: Schema inference (uses schema directory)")
+    print(f"   • Shipment Demo: Schema evolution (uses schema directory)")
     
 except Exception as e:
     print(f"Error creating volume or directories: {e}")
@@ -148,90 +144,16 @@ except Exception as e:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Schema Management Utilities
+# MAGIC ## Schema Management
 # MAGIC 
-# MAGIC The following functions can be used to create initial schema files if needed for specific demos.
-
-# COMMAND ----------
-
-def create_initial_schema_file(schema_path: str, schema_definition: dict):
-    """
-    Create an initial schema file for Auto Loader.
-    This is only needed for demos that don't use inferSchema or schema evolution.
-    
-    Args:
-        schema_path: Path to the schema file
-        schema_definition: Dictionary containing the schema definition
-    """
-    try:
-        import json
-        schema_json = json.dumps(schema_definition, indent=2)
-        
-        # Write schema file to volume (use direct volume path, not /dbfs prefix)
-        with open(f"{schema_path}/_schema.json", 'w') as f:
-            f.write(schema_json)
-        
-        print(f"Created initial schema file at: {schema_path}/_schema.json")
-        return True
-        
-    except Exception as e:
-        print(f"Error creating schema file: {e}")
-        return False
-
-def create_customer_schema():
-    """Create initial schema for customer data (example - not used in current demo)"""
-    schema = {
-        "type": "struct",
-        "fields": [
-            {"name": "customer_id", "type": "string", "nullable": False},
-            {"name": "first_name", "type": "string", "nullable": True},
-            {"name": "last_name", "type": "string", "nullable": True},
-            {"name": "email", "type": "string", "nullable": True},
-            {"name": "phone_number", "type": "string", "nullable": True},
-            {"name": "address", "type": "string", "nullable": True},
-            {"name": "city", "type": "string", "nullable": True},
-            {"name": "state", "type": "string", "nullable": True},
-            {"name": "zip_code", "type": "string", "nullable": True},
-            {"name": "country", "type": "string", "nullable": True},
-            {"name": "customer_tier", "type": "string", "nullable": True},
-            {"name": "registration_date", "type": "date", "nullable": True},
-            {"name": "update_ts", "type": "timestamp", "nullable": True}
-        ]
-    }
-    
-    schema_path = f"{VOLUME_PATH}/checkpoint/customers/schema"
-    return create_initial_schema_file(schema_path, schema)
-
-def create_inventory_schema():
-    """Create fixed schema for inventory data (used in inventory demo)"""
-    schema = {
-        "type": "struct",
-        "fields": [
-            {"name": "product_id", "type": "string", "nullable": False},
-            {"name": "product_name", "type": "string", "nullable": True},
-            {"name": "category", "type": "string", "nullable": True},
-            {"name": "brand", "type": "string", "nullable": True},
-            {"name": "sku", "type": "string", "nullable": True},
-            {"name": "quantity_on_hand", "type": "integer", "nullable": True},
-            {"name": "quantity_reserved", "type": "integer", "nullable": True},
-            {"name": "unit_cost", "type": "double", "nullable": True},
-            {"name": "unit_price", "type": "double", "nullable": True},
-            {"name": "warehouse_location", "type": "string", "nullable": True},
-            {"name": "last_restocked", "type": "date", "nullable": True},
-            {"name": "reorder_level", "type": "integer", "nullable": True},
-            {"name": "supplier_id", "type": "string", "nullable": True},
-            {"name": "created_ts", "type": "timestamp", "nullable": True}
-        ]
-    }
-    
-    schema_path = f"{VOLUME_PATH}/schema/inventory"
-    return create_initial_schema_file(schema_path, schema)
-
-# Create fixed schema for inventory demo (this demo uses fixed schema)
-create_inventory_schema()
-
-# Example usage for other demos (commented out since they use inferSchema):
-# create_customer_schema()
+# MAGIC **Note**: This demo now uses inline schemas defined in the TSV configuration file.
+# MAGIC The schemas are automatically applied by the Auto Loader pipelines, so no manual
+# MAGIC schema file creation is needed.
+# MAGIC 
+# MAGIC - **Customer Demo**: Uses fixed schema with corrupt data handling
+# MAGIC - **Inventory Demo**: Uses fixed schema with corrupt data handling  
+# MAGIC - **Transaction Demo**: Uses schema inference
+# MAGIC - **Shipment Demo**: Uses schema evolution mode
 
 # COMMAND ----------
 
@@ -692,12 +614,12 @@ display(pd.DataFrame([shipment_batch3[0]]))
 # MAGIC | **Shipment Data** | JSON | 3 files | Schema evolution, File notifications |
 # MAGIC 
 # MAGIC ### File Locations (Databricks Volumes)
-# MAGIC - **Customer Data**: `/Volumes/{CATALOG}/{SCHEMA}/autoloader_demo/customers/`
-# MAGIC - **Transaction Data**: `/Volumes/{CATALOG}/{SCHEMA}/autoloader_demo/transactions/`
-# MAGIC - **Inventory Data**: `/Volumes/{CATALOG}/{SCHEMA}/autoloader_demo/inventory/`
-# MAGIC - **Shipment Data**: `/Volumes/{CATALOG}/{SCHEMA}/autoloader_demo/shipments/`
+# MAGIC - **Customer Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers/`
+# MAGIC - **Transaction Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions/`
+# MAGIC - **Inventory Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory/`
+# MAGIC - **Shipment Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments/`
 # MAGIC 
-# MAGIC **Note**: Replace `{CATALOG}` and `{SCHEMA}` with your actual catalog and schema names (default: `main.default`)
+# MAGIC **Note**: These paths match the TSV configuration. Update the CATALOG, SCHEMA, and VOLUME_NAME variables above if you need different paths.
 # MAGIC 
 # MAGIC ### Next Steps for Testing
 # MAGIC 
@@ -718,8 +640,9 @@ display(pd.DataFrame([shipment_batch3[0]]))
 # MAGIC - **Source paths**: Use the generated volume paths above
 # MAGIC - **File formats**: CSV for scenarios 1-3, JSON for scenario 4
 # MAGIC - **Schema handling**: 
-# MAGIC   - Customer/Transaction: `inferSchema=true` (Auto Loader infers schema)
-# MAGIC   - Inventory: Fixed schema (enforced schema with corrupt data handling)
+# MAGIC   - Customer: Fixed schema (inline in TSV config with corrupt data handling)
+# MAGIC   - Inventory: Fixed schema (inline in TSV config with corrupt data handling)
+# MAGIC   - Transaction: `inferSchema=true` (Auto Loader infers schema)
 # MAGIC   - Shipment: `schemaEvolutionMode=rescue` (Schema evolves dynamically)
 # MAGIC - **Error handling**: Corrupt data column for inventory data
 # MAGIC - **Archive options**: Move processed files to archive folders
@@ -727,17 +650,17 @@ display(pd.DataFrame([shipment_batch3[0]]))
 # MAGIC 
 # MAGIC **Volume Path Examples for Auto Loader:**
 # MAGIC ```python
-# MAGIC # Customer data (SCD Type 2)
-# MAGIC source_path = "/Volumes/main/default/autoloader_demo/customers"
+# MAGIC # Customer data (Fixed schema with corrupt data handling)
+# MAGIC source_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers"
 # MAGIC 
-# MAGIC # Transaction data (SCD Type 1)
-# MAGIC source_path = "/Volumes/main/default/autoloader_demo/transactions"
+# MAGIC # Transaction data (Schema inference)
+# MAGIC source_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions"
 # MAGIC 
-# MAGIC # Inventory data (Archive & Corrupt handling)
-# MAGIC source_path = "/Volumes/main/default/autoloader_demo/inventory"
+# MAGIC # Inventory data (Fixed schema with corrupt data handling)
+# MAGIC source_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory"
 # MAGIC 
-# MAGIC # Shipment data (File notifications & Schema evolution)
-# MAGIC source_path = "/Volumes/main/default/autoloader_demo/shipments"
+# MAGIC # Shipment data (Schema evolution & File notifications)
+# MAGIC source_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments"
 # MAGIC ```
 
 # COMMAND ----------
@@ -906,20 +829,18 @@ def cleanup_generated_data():
         dbutils.fs.mkdirs(INVENTORY_PATH)
         dbutils.fs.mkdirs(SHIPMENT_PATH)
         
-        # Recreate customer demo directories (separate volume structure)
-        customer_schema_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers"
-        customer_checkpoint_path = "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers"
-        dbutils.fs.mkdirs(customer_schema_path)
-        dbutils.fs.mkdirs(customer_checkpoint_path)
+        # Recreate checkpoint directories (for Auto Loader state tracking)
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/customers")
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/transactions")
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/inventory")
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/shipments")
         
-        # Recreate other demo checkpoint directories
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/transactions/schema")
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/transactions/data")
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/inventory/schema")
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/inventory/data")
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/shipments/schema")
-        dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/shipments/data")
-        dbutils.fs.mkdirs(f"{INVENTORY_PATH}/archive")
+        # Recreate schema directories (only needed for schema inference demos)
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/transactions")
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/shipments")
+        
+        # Recreate archive directory
+        dbutils.fs.mkdirs(f"{VOLUME_PATH}/archive/inventory")
         
         print("Recreated all directories")
         print("🎉 Cleanup complete! Ready for fresh data generation.")

@@ -10,7 +10,12 @@ with no loops or dynamic logic.
 import pandas as pd
 import json
 import os
+import sys
 from pathlib import Path
+
+# Add the src directory to the path so we can import our utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+from utils.schema_converter import convert_json_schema_to_spark, convert_json_schema_to_spark_string, validate_schema_definition
 
 def generate_bronze_table_notebook(op_name, op_config, notebook_path):
     """Generate a simple bronze table notebook for a single operation"""
@@ -20,27 +25,66 @@ def generate_bronze_table_notebook(op_name, op_config, notebook_path):
     target_table = op_config.get("target_table", "")
     file_format = op_config.get("file_format", "csv")
     
-    # Extract autoloader options
-    schema_location = op_config.get("schema_location", "")
-    checkpoint_location = op_config.get("checkpoint_location", "")
-    
     # Get table name for the target
     table_name = target_table.split('.')[-1] if '.' in target_table else target_table
+    
+    # Check if inline schema is provided
+    schema_definition = op_config.get("schema")
+    schema_code = ""
+    
+    if schema_definition:
+        # Validate schema definition
+        errors = validate_schema_definition(schema_definition)
+        if errors:
+            print(f"Warning: Schema validation errors for {op_name}: {errors}")
+            schema_code = ""
+        else:
+            # Convert JSON schema to PySpark schema code
+            try:
+                # Try to use PySpark objects first, fallback to string representation
+                try:
+                    spark_schema = convert_json_schema_to_spark(schema_definition)
+                    schema_code = f'''
+# Define fixed schema for data validation
+from pyspark.sql.types import *
+
+schema = {spark_schema}'''
+                except ImportError:
+                    # PySpark not available, use string representation
+                    spark_schema_str = convert_json_schema_to_spark_string(schema_definition)
+                    schema_code = f'''
+# Define fixed schema for data validation
+from pyspark.sql.types import *
+
+schema = {spark_schema_str}'''
+            except Exception as e:
+                print(f"Warning: Error converting schema for {op_name}: {e}")
+                schema_code = ""
     
     # Build autoloader options from config - only include options that are specified
     autoloader_options = {}
     
     # Add all options from the config that start with cloudFiles. or are format-specific
+    # Exclude schema and schema_location since we're handling schema differently now
     for key, value in op_config.items():
         if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
+            # Skip schema-related options if we have inline schema
+            if schema_definition and key in ["cloudFiles.schemaLocation", "inferSchema"]:
+                continue
             autoloader_options[key] = value
     
     # Generate individual .option() calls for each autoloader option
     option_lines = []
     for key, value in autoloader_options.items():
-        option_lines.append(f'                    .option("{key}", "{value}")')
+        option_lines.append(f'            .option("{key}", "{value}")')
     
     options_code = '\n'.join(option_lines) if option_lines else ''
+    
+    # Generate schema application code
+    schema_application = ""
+    if schema_definition:
+        schema_application = '''
+            .schema(schema)  # Apply fixed schema for data validation'''
     
     # Generate the notebook content
     notebook_content = f'''# Databricks notebook source
@@ -48,16 +92,17 @@ def generate_bronze_table_notebook(op_name, op_config, notebook_path):
 # MAGIC # {op_name.replace('_', ' ').title()} - Bronze Table
 # MAGIC 
 # MAGIC This notebook ingests data from {source_path} into {target_table}
+# MAGIC {"with fixed schema validation" if schema_definition else "with schema inference"}
 
 # COMMAND ----------
 
 import dlt
-from pyspark.sql.functions import *
+from pyspark.sql.functions import *{schema_code}
 
 # COMMAND ----------
 
 @dlt.table(
-    name="{table_name}",
+    name="{target_table}",
     table_properties={{
         "quality": "bronze",
         "operation": "{op_name}",
@@ -71,7 +116,7 @@ def {table_name}():
     return (spark.readStream
             .format("cloudFiles"){f'''
 {options_code}''' if options_code else ''}
-            .option("cloudFiles.format", "{file_format}")
+            .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -86,6 +131,10 @@ def {table_name}():
         f.write(notebook_content)
     
     print(f"Generated bronze notebook: {notebook_path}")
+    if schema_definition:
+        print(f"  - Using fixed schema with {len(schema_definition.get('fields', []))} fields")
+    else:
+        print(f"  - Using schema inference")
 
 def generate_silver_table_notebook(op_name, op_config, notebook_path):
     """Generate a simple silver table notebook for a single operation"""
@@ -250,6 +299,9 @@ def generate_combined_notebook(pipeline_group, bronze_operations, silver_operati
     print(f"         Gold operations: {len(gold_operations)}")
     print(f"         Notebook path: {notebook_path} (type: {type(notebook_path)})")
     
+    # Check if any bronze operation has a schema
+    has_schema = any(op_config.get("schema") for _, op_config in bronze_operations)
+    
     notebook_content = f'''# Databricks notebook source
 # MAGIC %md
 # MAGIC # Unified Pipeline - {pipeline_group.replace('_', ' ').title()}
@@ -263,7 +315,8 @@ def generate_combined_notebook(pipeline_group, bronze_operations, silver_operati
 # COMMAND ----------
 
 import dlt
-from pyspark.sql.functions import *
+from pyspark.sql.functions import *{'''
+from pyspark.sql.types import *''' if has_schema else ''}
 
 # COMMAND ----------
 
@@ -277,12 +330,45 @@ from pyspark.sql.functions import *
         file_format = op_config.get("file_format", "csv")
         table_name = target_table.split('.')[-1] if '.' in target_table else target_table
         
+        # Check if inline schema is provided
+        schema_definition = op_config.get("schema")
+        schema_code = ""
+        
+        if schema_definition:
+            # Validate schema definition
+            errors = validate_schema_definition(schema_definition)
+            if errors:
+                print(f"Warning: Schema validation errors for {op_name}: {errors}")
+                schema_code = ""
+            else:
+                # Convert JSON schema to PySpark schema code
+                try:
+                    # Try to use PySpark objects first, fallback to string representation
+                    try:
+                        spark_schema = convert_json_schema_to_spark(schema_definition)
+                        schema_code = f'''
+# Define fixed schema for data validation
+schema = {spark_schema}'''
+                    except ImportError:
+                        # PySpark not available, use string representation
+                        spark_schema_str = convert_json_schema_to_spark_string(schema_definition)
+                        schema_code = f'''
+# Define fixed schema for data validation
+schema = {spark_schema_str}'''
+                except Exception as e:
+                    print(f"Warning: Error converting schema for {op_name}: {e}")
+                    schema_code = ""
+        
         # Build autoloader options from config - only include options that are specified
         autoloader_options = {}
         
         # Add all options from the config that start with cloudFiles. or are format-specific
+        # Exclude schema and schema_location since we're handling schema differently now
         for key, value in op_config.items():
             if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
+                # Skip schema-related options if we have inline schema
+                if schema_definition and key in ["cloudFiles.schemaLocation", "inferSchema"]:
+                    continue
                 autoloader_options[key] = value
         
         # Generate individual .option() calls for each autoloader option
@@ -292,9 +378,15 @@ from pyspark.sql.functions import *
         
         options_code = '\n'.join(option_lines) if option_lines else ''
         
+        # Generate schema application code
+        schema_application = ""
+        if schema_definition:
+            schema_application = '''
+            .schema(schema)  # Apply fixed schema for data validation'''
+        
         notebook_content += f'''
 
-# COMMAND ----------
+# COMMAND ----------{schema_code}
 
 @dlt.table(
     name="{target_table}",
@@ -311,9 +403,7 @@ def {table_name}():
     return (spark.readStream
             .format("cloudFiles"){f'''
 {options_code}''' if options_code else ''}
-            .option("cloudFiles.format", "{file_format}")'''
-        
-        notebook_content += f'''
+            .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -432,7 +522,7 @@ def main():
                 
                 # Add all autoloader options from the pipeline_config
                 for key, value in pipeline_config.items():
-                    if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
+                    if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"] or key == "schema":
                         operations_config[op_name][key] = value
             elif operation_type == 'silver':
                 op_name = f"silver_{row['target_table'].split('.')[-1].replace('_scd2', '')}"
