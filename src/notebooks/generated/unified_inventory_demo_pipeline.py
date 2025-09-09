@@ -34,7 +34,16 @@ def inventory_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/inventory", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/inventory", "cloudFiles.maxFilesPerTrigger": "200", "cloudFiles.allowOverwrites": "false", "header": "true", "inferSchema": "false", "cloudFiles.archiveLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/archive/inventory", "cloudFiles.rescuedDataColumn": "corrupt_data", "cloudFiles.validateOptions": "false"})
+            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/inventory")
+            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/inventory")
+            .option("cloudFiles.maxFilesPerTrigger", "1")
+            .option("cloudFiles.allowOverwrites", "false")
+            .option("header", "true")
+            .option("inferSchema", "false")
+            .option("cloudFiles.cleanSource", "MOVE")
+            .option("cloudFiles.cleanSource.moveDestination", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/archive/inventory")
+            .option("cloudFiles.rescuedDataColumn", "corrupt_data")
+            .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory")
             .selectExpr("*", 

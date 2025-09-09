@@ -35,6 +35,13 @@ def generate_bronze_table_notebook(op_name, op_config, notebook_path):
         if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
             autoloader_options[key] = value
     
+    # Generate individual .option() calls for each autoloader option
+    option_lines = []
+    for key, value in autoloader_options.items():
+        option_lines.append(f'                    .option("{key}", "{value}")')
+    
+    options_code = '\n'.join(option_lines) if option_lines else ''
+    
     # Generate the notebook content
     notebook_content = f'''# Databricks notebook source
 # MAGIC %md
@@ -59,15 +66,15 @@ from pyspark.sql.functions import *
         "delta.enableChangeDataFeed": "true"
     }}
 )
-        def {table_name}():
-            # Read from source using autoloader and add audit columns using selectExpr
-            return (spark.readStream
-                    .format("cloudFiles")
-                    .options(**{json.dumps(autoloader_options)})
-                    .option("cloudFiles.format", "{file_format}")
-                    .load("{source_path}")
-                    .selectExpr("*", 
-                                "current_timestamp() as _ingestion_timestamp"))
+def {table_name}():
+    # Read from source using autoloader and add audit columns using selectExpr
+    return (spark.readStream
+            .format("cloudFiles"){f'''
+{options_code}''' if options_code else ''}
+            .option("cloudFiles.format", "{file_format}")
+            .load("{source_path}")
+            .selectExpr("*", 
+                        "current_timestamp() as _ingestion_timestamp"))
 
 # COMMAND ----------
 
@@ -278,6 +285,13 @@ from pyspark.sql.functions import *
             if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
                 autoloader_options[key] = value
         
+        # Generate individual .option() calls for each autoloader option
+        option_lines = []
+        for key, value in autoloader_options.items():
+            option_lines.append(f'            .option("{key}", "{value}")')
+        
+        options_code = '\n'.join(option_lines) if option_lines else ''
+        
         notebook_content += f'''
 
 # COMMAND ----------
@@ -295,8 +309,8 @@ from pyspark.sql.functions import *
 def {table_name}():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
-            .format("cloudFiles")
-            .options(**{json.dumps(autoloader_options)})
+            .format("cloudFiles"){f'''
+{options_code}''' if options_code else ''}
             .option("cloudFiles.format", "{file_format}")'''
         
         notebook_content += f'''

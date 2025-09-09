@@ -34,7 +34,14 @@ def shipments_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/shipments", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/shipments", "cloudFiles.maxFilesPerTrigger": "100", "cloudFiles.allowOverwrites": "false", "cloudFiles.useManagedFileEvents": "true", "cloudFiles.schemaEvolutionMode": "rescue", "cloudFiles.validateOptions": "false", "multiline": "true"})
+            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/shipments")
+            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/shipments")
+            .option("cloudFiles.maxFilesPerTrigger", "100")
+            .option("cloudFiles.allowOverwrites", "false")
+            .option("cloudFiles.useManagedFileEvents", "true")
+            .option("cloudFiles.schemaEvolutionMode", "rescue")
+            .option("cloudFiles.validateOptions", "false")
+            .option("multiline", "true")
             .option("cloudFiles.format", "json")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments")
             .selectExpr("*", 

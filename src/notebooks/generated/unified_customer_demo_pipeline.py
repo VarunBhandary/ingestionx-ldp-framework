@@ -34,7 +34,13 @@ def customers_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers", "cloudFiles.maxFilesPerTrigger": "100", "cloudFiles.allowOverwrites": "false", "header": "true", "inferSchema": "true", "cloudFiles.validateOptions": "false"})
+            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers")
+            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers")
+            .option("cloudFiles.maxFilesPerTrigger", "100")
+            .option("cloudFiles.allowOverwrites", "false")
+            .option("header", "true")
+            .option("inferSchema", "true")
+            .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
             .selectExpr("*", 

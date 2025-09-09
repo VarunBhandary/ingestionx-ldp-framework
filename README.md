@@ -33,15 +33,16 @@ The framework includes comprehensive demo scenarios that showcase real-world Aut
   - Real-time transaction processing
 - **Auto Loader Options**: Schema inference, checkpoint management
 
-### **3. Inventory Data Demo (Fixed Schema + Archive)**
-- **Scenario**: Daily inventory files with fixed schema and archive management
+### **3. Inventory Data Demo (Fixed Schema + Immediate Archive)**
+- **Scenario**: Daily inventory files with fixed schema and immediate archive management
 - **Format**: CSV files with strict schema requirements
 - **Features**:
   - **Fixed schema enforcement** with predefined schema file
-  - **Archive functionality** using `cloudFiles.archiveLocation`
+  - **Immediate file archiving** using `cloudFiles.cleanSource: move`
   - **Corrupt data handling** with `cloudFiles.rescuedDataColumn`
   - **Schema validation** to ensure data quality
-- **Auto Loader Options**: Archive location, rescued data column, schema validation
+  - **Single file processing** with `maxFilesPerTrigger: 1` for immediate archiving
+- **Auto Loader Options**: Clean source move, rescued data column, schema validation
 
 ### **4. Shipment Data Demo (File Notification Mode)**
 - **Scenario**: Real-time shipment tracking with evolving schema
@@ -402,9 +403,10 @@ The demo showcases key [Auto Loader options](https://learn.microsoft.com/en-us/a
 |--------|---------|------------|--------------|
 | `cloudFiles.schemaLocation` | Schema tracking and evolution | All demos - separate schema directories | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/schema/{demo}` |
 | `cloudFiles.checkpointLocation` | Processing state tracking | All demos - separate checkpoint directories | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/checkpoint/{demo}` |
-| `cloudFiles.maxFilesPerTrigger` | Batch size control | Customer: 100, Transaction: 50, Inventory: 200, Shipment: 100 | N/A |
+| `cloudFiles.maxFilesPerTrigger` | Batch size control | Customer: 100, Transaction: 50, Inventory: 1, Shipment: 100 | N/A |
 | `cloudFiles.allowOverwrites` | File overwrite handling | All demos: false (safety) | N/A |
-| `cloudFiles.archiveLocation` | File archiving | Inventory demo only | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/archive/inventory` |
+| `cloudFiles.cleanSource` | Immediate file archiving | Inventory demo: "move" | N/A |
+| `cloudFiles.cleanSource.moveDestination` | Archive destination | Inventory demo | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/archive/inventory` |
 | `cloudFiles.rescuedDataColumn` | Corrupt data handling | Inventory demo: "corrupt_data" | N/A |
 | `cloudFiles.useManagedFileEvents` | File notification mode | Shipment demo only | N/A |
 | `cloudFiles.schemaEvolutionMode` | Schema change handling | Shipment demo: "rescue" | N/A |
