@@ -34,14 +34,8 @@ def customers_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
+            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers", "cloudFiles.maxFilesPerTrigger": "100", "cloudFiles.allowOverwrites": "false", "header": "true", "inferSchema": "true", "cloudFiles.validateOptions": "false"})
             .option("cloudFiles.format", "csv")
-            .option("header", "true")
-            .option("inferSchema", "true")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/customers")
-            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customers")
-            .option("cloudFiles.maxFilesPerTrigger", "100")
-            .option("cloudFiles.allowOverwrites", "false")
-            .option("cloudFiles.validateOptions", "false")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -69,10 +63,7 @@ def bronze_customers_demo_scd2_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.customers_demo_scd2",
     source="bronze_customers_demo_scd2_source",
-    keys=["customer_id"],
-    sequence_by="update_ts",
-    except_column_list=["first_name", "last_name", "email", "phone_number", "address", "city", "state", "zip_code", "country", "customer_tier"],
-    stored_as_scd_type="2"
+    **{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email", "phone_number", "address", "city", "state", "zip_code", "country", "customer_tier"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}
 )
 
 

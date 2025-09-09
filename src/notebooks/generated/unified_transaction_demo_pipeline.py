@@ -34,14 +34,8 @@ def transactions_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
+            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/transactions", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/transactions", "cloudFiles.maxFilesPerTrigger": "50", "cloudFiles.allowOverwrites": "false", "header": "true", "inferSchema": "true", "cloudFiles.validateOptions": "false"})
             .option("cloudFiles.format", "csv")
-            .option("header", "true")
-            .option("inferSchema", "true")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/transactions")
-            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/transactions")
-            .option("cloudFiles.maxFilesPerTrigger", "50")
-            .option("cloudFiles.allowOverwrites", "false")
-            .option("cloudFiles.validateOptions", "false")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -69,10 +63,7 @@ def bronze_transactions_demo_scd1_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.transactions_demo_scd1",
     source="bronze_transactions_demo_scd1_source",
-    keys=["transaction_id"],
-    sequence_by="updated_ts",
-    except_column_list=["customer_id", "transaction_type", "amount", "currency", "status", "payment_method", "transaction_date", "processed_date", "is_deleted"],
-    stored_as_scd_type="1"
+    **{"keys": ["transaction_id"], "stored_as_scd_type": "1", "sequence_by": "updated_ts"}
 )
 
 

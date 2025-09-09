@@ -34,15 +34,8 @@ def inventory_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
+            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/inventory", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/inventory", "cloudFiles.maxFilesPerTrigger": "200", "cloudFiles.allowOverwrites": "false", "header": "true", "inferSchema": "false", "cloudFiles.archiveLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/archive/inventory", "cloudFiles.rescuedDataColumn": "corrupt_data", "cloudFiles.validateOptions": "false"})
             .option("cloudFiles.format", "csv")
-            .option("header", "true")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/inventory")
-            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/inventory")
-            .option("cloudFiles.maxFilesPerTrigger", "200")
-            .option("cloudFiles.allowOverwrites", "false")
-            .option("cloudFiles.archiveLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/archive/inventory")
-            .option("cloudFiles.rescuedDataColumn", "corrupt_data")
-            .option("cloudFiles.validateOptions", "false")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -70,10 +63,7 @@ def bronze_inventory_demo_scd1_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.inventory_demo_scd1",
     source="bronze_inventory_demo_scd1_source",
-    keys=["product_id"],
-    sequence_by="created_ts",
-    except_column_list=["product_name", "category", "brand", "sku", "quantity_on_hand", "quantity_reserved", "unit_cost", "unit_price", "warehouse_location", "last_restocked", "reorder_level", "supplier_id"],
-    stored_as_scd_type="1"
+    **{"keys": ["product_id"], "stored_as_scd_type": "1", "sequence_by": "created_ts"}
 )
 
 

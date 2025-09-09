@@ -34,15 +34,8 @@ def shipments_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
+            .options(**{"cloudFiles.schemaLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/shipments", "cloudFiles.checkpointLocation": "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/shipments", "cloudFiles.maxFilesPerTrigger": "100", "cloudFiles.allowOverwrites": "false", "cloudFiles.useManagedFileEvents": "true", "cloudFiles.schemaEvolutionMode": "rescue", "cloudFiles.validateOptions": "false", "multiline": "true"})
             .option("cloudFiles.format", "json")
-            .option("multiline", "true")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/shipments")
-            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/shipments")
-            .option("cloudFiles.maxFilesPerTrigger", "100")
-            .option("cloudFiles.allowOverwrites", "false")
-            .option("cloudFiles.useManagedFileEvents", "true")
-            .option("cloudFiles.schemaEvolutionMode", "rescue")
-            .option("cloudFiles.validateOptions", "false")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments")
             .selectExpr("*", 
                         "current_timestamp() as _ingestion_timestamp"))
@@ -70,10 +63,7 @@ def bronze_shipments_demo_scd1_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.shipments_demo_scd1",
     source="bronze_shipments_demo_scd1_source",
-    keys=["shipment_id"],
-    sequence_by="created_ts",
-    except_column_list=["order_id", "carrier", "tracking_number", "status", "origin_address", "destination_address", "ship_date", "estimated_delivery", "weight_lbs"],
-    stored_as_scd_type="1"
+    **{"keys": ["shipment_id"], "stored_as_scd_type": "1", "sequence_by": "created_ts"}
 )
 
 
