@@ -45,6 +45,31 @@ graph TD
 - `generate_bronze_table_notebook()`: Generates bronze ingestion logic
 - `generate_silver_table_notebook()`: Generates silver SCD2 transformation logic
 
+**Auto Loader Options Handling**:
+The framework uses individual `.option()` calls to ensure proper case sensitivity and extensibility:
+
+```python
+# Individual .option() calls for each Auto Loader option
+return (spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.schemaLocation", "/path/to/schema")
+        .option("cloudFiles.checkpointLocation", "/path/to/checkpoint")
+        .option("cloudFiles.maxFilesPerTrigger", "1")
+        .option("cloudFiles.cleanSource", "MOVE")
+        .option("cloudFiles.cleanSource.moveDestination", "/path/to/archive")
+        .option("cloudFiles.validateOptions", "true")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .option("cloudFiles.format", "csv")
+        .load("/source/path"))
+```
+
+**Benefits of Individual .option() Approach**:
+- ✅ **Case Sensitivity**: Preserves exact option names from TSV configuration
+- ✅ **Extensibility**: Automatically picks up any new Auto Loader options
+- ✅ **Debugging**: Easy to read and troubleshoot individual options
+- ✅ **No Hardcoding**: All options come directly from TSV configuration
+
 ### 2. Resource Generator (`resources/unified_pipeline_generator.py`)
 
 **Purpose**: Generates Databricks resources (pipelines, jobs) from configuration.
@@ -345,7 +370,67 @@ databricks bundle validate --profile dev
 3. Add validation logic
 4. Update documentation
 
+#### Adding New Auto Loader Options
+1. Add new options to TSV configuration in `pipeline_config` column
+2. The framework automatically picks up any option starting with `cloudFiles.` or format-specific options (`header`, `inferSchema`, `multiline`)
+3. Options are automatically converted to individual `.option()` calls in generated notebooks
+4. No code changes required in the framework - fully extensible
+
+**Example**:
+```tsv
+# Add new Auto Loader options to TSV
+{"cloudFiles.schemaLocation": "/path/schema", "cloudFiles.newOption": "value", "cloudFiles.anotherOption": "anotherValue"}
+```
+
+**Generated Code**:
+```python
+# Automatically generated individual .option() calls
+.option("cloudFiles.schemaLocation", "/path/schema")
+.option("cloudFiles.newOption", "value")
+.option("cloudFiles.anotherOption", "anotherValue")
+```
+
 ## 🔧 Configuration Extensions
+
+### Auto Loader Options Implementation
+
+The framework implements a robust system for handling Auto Loader options that ensures case sensitivity and extensibility:
+
+#### Option Detection Logic
+```python
+# Build autoloader options from config - only include options that are specified
+autoloader_options = {}
+
+# Add all options from the config that start with cloudFiles. or are format-specific
+for key, value in op_config.items():
+    if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"]:
+        autoloader_options[key] = value
+```
+
+#### Individual Option Generation
+```python
+# Generate individual .option() calls for each autoloader option
+option_lines = []
+for key, value in autoloader_options.items():
+    option_lines.append(f'            .option("{key}", "{value}")')
+
+options_code = '\n'.join(option_lines) if option_lines else ''
+```
+
+#### Template Integration
+```python
+# Embed options in notebook template with proper formatting
+return (spark.readStream
+        .format("cloudFiles"){f'''
+{options_code}''' if options_code else ''}
+        .option("cloudFiles.format", "{file_format}")
+        .load("{source_path}"))
+```
+
+#### Supported Option Types
+- **CloudFiles Options**: Any option starting with `cloudFiles.`
+- **Format Options**: `header`, `inferSchema`, `multiline`
+- **Custom Options**: Automatically detected and included
 
 ### Custom Pipeline Properties
 
@@ -440,6 +525,45 @@ databricks bundle validate --profile dev
 2. **Configuration Errors**: Validate TSV format and JSON syntax
 3. **Deployment Errors**: Check Databricks profile and permissions
 4. **Scheduling Issues**: Verify Quartz cron syntax
+5. **Auto Loader Option Validation Errors**: Case sensitivity issues with option names
+
+### Auto Loader Option Validation Issues
+
+**Problem**: `STREAM_FAILED` errors with "Found unknown option keys" when `cloudFiles.validateOptions` is `true`.
+
+**Root Cause**: JSON embedding in f-strings can cause case conversion and double-encoding issues.
+
+**Solution**: The framework uses individual `.option()` calls instead of JSON embedding:
+
+```python
+# ❌ Problematic approach (causes case conversion)
+.options(**{"cloudFiles.cleanSource": "MOVE"})
+
+# ✅ Fixed approach (preserves case sensitivity)
+.option("cloudFiles.cleanSource", "MOVE")
+```
+
+**Implementation Details**:
+```python
+# Generate individual .option() calls for each autoloader option
+option_lines = []
+for key, value in autoloader_options.items():
+    option_lines.append(f'            .option("{key}", "{value}")')
+
+options_code = '\n'.join(option_lines) if option_lines else ''
+
+# Embed in notebook template
+return (spark.readStream
+        .format("cloudFiles"){f'''
+{options_code}''' if options_code else ''}
+        .option("cloudFiles.format", "{file_format}")
+        .load("{source_path}"))
+```
+
+**Verification**:
+- Check generated notebooks for proper case sensitivity
+- Ensure all TSV options are included as individual `.option()` calls
+- Validate with `cloudFiles.validateOptions: true` enabled
 
 ### Debug Commands
 
