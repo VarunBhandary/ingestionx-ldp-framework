@@ -45,13 +45,34 @@ The framework includes comprehensive demo scenarios that showcase real-world Aut
 
 ### **4. Shipment Data Demo (File Notification Mode)**
 - **Scenario**: Real-time shipment tracking with evolving schema
-- **Format**: JSON files with dynamic structure
+- **Format**: JSON files with nested objects and dynamic structure
 - **Features**:
   - **File notification mode** using `cloudFiles.useManagedFileEvents: true`
   - **Schema evolution** with `cloudFiles.schemaEvolutionMode: rescue`
+  - **Multiline JSON support** with `multiline: true` for nested objects
   - **Real-time processing** triggered by file arrivals
-  - **Schema flexibility** to handle new fields
-- **Auto Loader Options**: Managed file events, schema evolution mode
+  - **Schema flexibility** to handle new fields and nested structures
+- **Auto Loader Options**: Managed file events, schema evolution mode, multiline JSON
+
+### **5. Manual Pipeline Demo (Custom Notebooks)**
+- **Scenario**: Custom notebook-based jobs with full control and dependencies
+- **Format**: Python notebooks with parameter passing
+- **Features**:
+  - **Order-based execution** using `{"order": 1, 2, 3}` for sequencing
+  - **Dependency management** with `{"depends_on": 1}` for parallel steps
+  - **Parameter passing** for pipeline group, operation type, and execution context
+  - **Custom logic** without DLT dependencies
+- **Use Cases**: Custom transformations, external API calls, complex business logic
+
+### **6. Silver-Only Pipeline Demo (DLT without Bronze)**
+- **Scenario**: Silver layer processing from existing bronze tables
+- **Format**: DLT pipeline reading from pre-existing bronze tables
+- **Features**:
+  - **SCD Type 2 processing** with full history tracking
+  - **External bronze table** integration (e.g., from other systems)
+  - **Independent execution** without bronze layer dependencies
+  - **Same DLT capabilities** as full bronze+silver pipelines
+- **Use Cases**: Data warehouse migrations, external system integration, bronze table reuse
 
 ## 📁 **Demo Directory Structure**
 
@@ -387,6 +408,7 @@ The demo showcases key [Auto Loader options](https://learn.microsoft.com/en-us/a
 | `cloudFiles.rescuedDataColumn` | Corrupt data handling | Inventory demo: "corrupt_data" | N/A |
 | `cloudFiles.useManagedFileEvents` | File notification mode | Shipment demo only | N/A |
 | `cloudFiles.schemaEvolutionMode` | Schema change handling | Shipment demo: "rescue" | N/A |
+| `multiline` | JSON multiline support | Shipment demo: true (for nested objects) | N/A |
 | `cloudFiles.validateOptions` | Option validation | All demos: false (temporary) | N/A |
 
 ### **File Format Options**
@@ -394,7 +416,7 @@ The demo showcases key [Auto Loader options](https://learn.microsoft.com/en-us/a
 | Format | Demo | Options Used |
 |--------|------|--------------|
 | **CSV** | Customer, Transaction, Inventory | `header: true`, `inferSchema: true` |
-| **JSON** | Shipment | Schema evolution with rescue mode |
+| **JSON** | Shipment | `multiline: true`, `cloudFiles.schemaEvolutionMode: rescue` |
 
 ### **Schema Management**
 
@@ -493,7 +515,13 @@ This function:
    - Use `cloudFiles.validateOptions: false` for testing
    - **Configuration Issue**: Ensure all paths in TSV use your actual catalog/schema/volume names
 
-4. **Pipeline Failures**
+4. **JSON Schema Inference Errors**
+   - **Error**: `Failed to infer schema for format json`
+   - **Root Cause**: JSON files with nested objects require `multiline: true`
+   - **Solution**: Add `"multiline": "true"` to JSON pipeline configurations
+   - **Example**: Shipment demo uses nested objects like `package_dimensions`, `customs_declaration`
+
+5. **Pipeline Failures**
    - Check Auto Loader option names against [Microsoft documentation](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/options)
    - Verify directory permissions
    - Check cluster configuration and permissions
