@@ -188,14 +188,16 @@ class UnifiedPipelineGenerator:
             try:
                 pipeline_config = json.loads(op.get('pipeline_config', '{}'))
                 op['_order'] = pipeline_config.get('order', 0)
+                op['_depends_on'] = pipeline_config.get('depends_on', None)
             except (json.JSONDecodeError, TypeError):
                 op['_order'] = 0
+                op['_depends_on'] = None
         
         manual_operations.sort(key=lambda x: x['_order'])
         
         # Create tasks list for manual operations
         tasks = []
-        previous_task_key = None
+        task_key_map = {}  # Map order -> task_key for dependency resolution
         
         for i, manual_op in enumerate(manual_operations):
             notebook_path = manual_op.get('source_path', '')
@@ -219,15 +221,37 @@ class UnifiedPipelineGenerator:
                 run_if="ALL_SUCCESS"
             )
             
-            # Add dependency if this is not the first task
-            if previous_task_key:
-                task.depends_on = [{"task_key": previous_task_key}]
-                print(f"      Added manual notebook task: {notebook_path} (depends on {previous_task_key})")
+            # Handle dependencies based on depends_on configuration
+            depends_on_order = manual_op.get('_depends_on')
+            if depends_on_order is not None:
+                # Find the task that this operation depends on
+                dependent_task_key = task_key_map.get(depends_on_order)
+                if dependent_task_key:
+                    task.depends_on = [{"task_key": dependent_task_key}]
+                    print(f"      Added manual notebook task: {notebook_path} (depends on order {depends_on_order}: {dependent_task_key})")
+                else:
+                    print(f"      Warning: Could not find dependency for order {depends_on_order}, task will run without dependency")
+                    print(f"      Added manual notebook task: {notebook_path} (no dependency)")
             else:
-                print(f"      Added manual notebook task: {notebook_path} (first task)")
+                # No explicit dependency, check if this is the first task of its order
+                current_order = manual_op.get('_order', 0)
+                if current_order == 1 or not any(op.get('_order', 0) < current_order for op in manual_operations):
+                    print(f"      Added manual notebook task: {notebook_path} (first task of order {current_order})")
+                else:
+                    # Find the last task of the previous order
+                    previous_order = current_order - 1
+                    previous_task_key = task_key_map.get(previous_order)
+                    if previous_task_key:
+                        task.depends_on = [{"task_key": previous_task_key}]
+                        print(f"      Added manual notebook task: {notebook_path} (depends on previous order {previous_order}: {previous_task_key})")
+                    else:
+                        print(f"      Added manual notebook task: {notebook_path} (no dependency found)")
             
             tasks.append(task)
-            previous_task_key = task_key
+            
+            # Map the order to task key for future dependencies
+            current_order = manual_op.get('_order', 0)
+            task_key_map[current_order] = task_key
         
         if not tasks:
             print(f"      Error: No valid manual operations found for {pipeline_group}")
