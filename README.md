@@ -11,6 +11,12 @@ This framework provides a unified approach to data pipeline management in Databr
 - **`gold`**: Analytics and reporting operations
 - **`manual`**: Custom notebook-based jobs with full control
 
+### **📋 Prerequisites**
+
+- **Databricks Runtime**: 16.4 LTS or above (required for `cloudFiles.cleanSource` functionality)
+- **Unity Catalog**: Enabled workspace with appropriate permissions
+- **Volumes**: Access to create and manage volumes in your catalog/schema
+
 ## 🎯 **Auto Loader Demo Scenarios**
 
 The framework includes comprehensive demo scenarios that showcase real-world Auto Loader use cases:
@@ -34,15 +40,15 @@ The framework includes comprehensive demo scenarios that showcase real-world Aut
   - Real-time transaction processing
 - **Auto Loader Options**: Schema inference, checkpoint management
 
-### **3. Inventory Data Demo (Fixed Schema + Immediate Archive)**
-- **Scenario**: Daily inventory files with fixed schema and immediate archive management
+### **3. Inventory Data Demo (Fixed Schema + Archive Management)**
+- **Scenario**: Daily inventory files with fixed schema and archive management
 - **Format**: CSV files with strict schema requirements
 - **Features**:
   - **Fixed schema enforcement** with inline schema definition in TSV config
-  - **Immediate file archiving** using `cloudFiles.cleanSource: move`
+  - **File archiving** using `cloudFiles.cleanSource: move` (moves files 30 days after processing)
   - **Corrupt data handling** with `cloudFiles.rescuedDataColumn`
   - **Schema validation** to ensure data quality
-  - **Single file processing** with `maxFilesPerTrigger: 1` for immediate archiving
+  - **Single file processing** with `maxFilesPerTrigger: 1` for controlled batch processing
 - **Auto Loader Options**: Fixed schema, clean source move, rescued data column, schema validation
 
 ### **4. Shipment Data Demo (File Notification Mode)**
@@ -405,14 +411,17 @@ The demo showcases key [Auto Loader options](https://learn.microsoft.com/en-us/a
 | `cloudFiles.checkpointLocation` | Processing state tracking | All demos - separate checkpoint directories | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/checkpoint/{demo}` |
 | `cloudFiles.maxFilesPerTrigger` | Batch size control | Customer: 100, Transaction: 50, Inventory: 1, Shipment: 100 | N/A |
 | `cloudFiles.allowOverwrites` | File overwrite handling | All demos: false (safety) | N/A |
-| `cloudFiles.cleanSource` | Immediate file archiving | Inventory demo: "move" | N/A |
+| `cloudFiles.cleanSource` | File archiving after processing | Inventory demo: "move" (30 days after processing) | N/A |
 | `cloudFiles.cleanSource.moveDestination` | Archive destination | Inventory demo | `/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/archive/inventory` |
+| `cloudFiles.cleanSource.retentionDuration` | Archive retention duration | Configurable (minimum 7 days, default 30 days) | N/A |
 | `cloudFiles.rescuedDataColumn` | Corrupt data handling | Customer, Inventory demos: "corrupt_data" | N/A |
 | `cloudFiles.useManagedFileEvents` | File notification mode | Shipment demo only | N/A |
 | `cloudFiles.schemaEvolutionMode` | Schema change handling | Shipment demo: "rescue" | N/A |
 | `multiline` | JSON multiline support | Shipment demo: true (for nested objects) | N/A |
 | `cloudFiles.validateOptions` | Option validation | All demos: false (temporary) | N/A |
 | `.schema(schema)` | Fixed schema enforcement | Customer, Inventory demos | Inline schema definition |
+
+**Note**: `cloudFiles.cleanSource` requires Databricks Runtime 16.4 LTS or above.
 
 ### **File Format Options**
 
@@ -479,6 +488,16 @@ For demos requiring data validation and corrupt data handling, schemas are defin
 - **Corrupt Data Rescue**: Captures data that doesn't match schema in `rescuedDataColumn`
 - **Data Quality**: Prevents downstream processing issues
 
+### **File Archiving Behavior**
+
+- **Runtime Requirement**: Databricks Runtime 16.4 LTS or above (required for `cloudFiles.cleanSource`)
+- **Default Retention**: Files are archived 30 days after processing (not immediately)
+- **Configurable Retention**: Use `cloudFiles.cleanSource.retentionDuration` to set custom retention (minimum 7 days)
+- **Archive Modes**: 
+  - `MOVE`: Moves files to specified destination
+  - `DELETE`: Deletes files from source location
+  - `OFF`: No automatic file management (default)
+
 ## 📊 **Demo Data Scenarios**
 
 ### **Scenario 1: Customer Data (SCD Type 2)**
@@ -515,10 +534,10 @@ inventory_batch2 = generate_inventory_data(batch_number=2, num_products=150, inc
 ```
 
 **What to Observe:**
-- Fixed schema enforcement
-- Corrupt data handling in `corrupt_data` column
-- File archiving to archive directory
-- Schema validation failures
+- Fixed schema enforcement with data validation
+- Corrupt data handling in `rescuedDataColumn`
+- File archiving after 30 days (configurable with `cloudFiles.cleanSource.retentionDuration`)
+- Single file processing for controlled batch ingestion
 
 ### **Scenario 4: Shipment Data (File Notification Mode)**
 ```python

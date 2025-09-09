@@ -2,6 +2,13 @@
 
 This guide is for developers who want to extend, modify, or contribute to the Azure Databricks Autoloader Framework.
 
+## 📋 Prerequisites
+
+- **Databricks Runtime**: 16.4 LTS or above (required for `cloudFiles.cleanSource` functionality)
+- **Unity Catalog**: Enabled workspace with appropriate permissions
+- **Volumes**: Access to create and manage volumes in your catalog/schema
+- **Python**: 3.8 or above for local development
+
 ## 🏗️ Architecture Overview
 
 ### Framework Components
