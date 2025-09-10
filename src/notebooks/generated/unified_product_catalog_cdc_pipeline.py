@@ -46,7 +46,7 @@ def product_catalog_cdc():
             .option("cloudFiles.format", "csv")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/product_catalog_cdc")
-            .selectExpr("*", "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation, COALESCE(updated_at, created_at) as sequence_ts, current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation", "COALESCE(updated_at, created_at) as sequence_ts", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------
@@ -63,7 +63,7 @@ dlt.create_streaming_table("vbdemos.adls_silver.product_catalog_cdc_scd2")
 
 @dlt.view
 def bronze_product_catalog_cdc_scd2_source():
-    return spark.readStream.table("vbdemos.adls_bronze.product_catalog_cdc").selectExpr("product_id, product_name as product_title, category as product_category, price as unit_price, description as product_description, status as product_status, created_at as effective_start_date, updated_at as last_modified_date, deleted_at as soft_delete_date, cdc_operation, sequence_ts")
+    return spark.readStream.table("vbdemos.adls_bronze.product_catalog_cdc").selectExpr("product_id", "product_name as product_title", "category as product_category", "price as unit_price", "description as product_description", "status as product_status", "created_at as effective_start_date", "updated_at as last_modified_date", "deleted_at as soft_delete_date", "cdc_operation", "sequence_ts")
 
 # COMMAND ----------
 
@@ -71,7 +71,7 @@ def bronze_product_catalog_cdc_scd2_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.product_catalog_cdc_scd2",
     source="bronze_product_catalog_cdc_scd2_source",
-    **{"keys": ["product_id"], "track_history_except_column_list": ["product_name", "category", "price", "description", "status"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}
+    **{"keys": ["product_id"], "track_history_except_column_list": ["product_title", "product_category", "unit_price", "product_description", "product_status"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}
 )
 
 

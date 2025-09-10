@@ -415,6 +415,10 @@ schema = {spark_schema_str}'''
         
         # Handle custom expressions
         custom_expr = op_config.get("custom_expr", "")
+        # Handle NaN values from pandas
+        if pd.isna(custom_expr) or custom_expr == "nan" or custom_expr == "":
+            custom_expr = ""
+        
         if custom_expr:
             # Check if custom expression starts with * - if so, use selectExpr with * and remaining expression
             if custom_expr.strip().startswith('*'):
@@ -424,12 +428,17 @@ schema = {spark_schema_str}'''
                 remaining_expr = custom_expr.strip()[1:].strip()
                 if remaining_expr.startswith(','):
                     remaining_expr = remaining_expr[1:].strip()
-                # Pass * and the remaining expression as separate arguments
-                select_expr = f'"*", "{remaining_expr}"'
+                
+                # Split the remaining expression by commas, but be careful with function calls and string literals
+                expressions = _parse_expressions_smart(remaining_expr)
+                
+                select_expr = '"*", ' + ', '.join([f'"{expr}"' for expr in expressions])
             else:
                 # Use selectExpr() for expressions without *
                 select_method = "selectExpr"
-                select_expr = f'"{custom_expr}"'
+                # Split the expression by commas and format as separate arguments
+                expressions = _parse_expressions_smart(custom_expr)
+                select_expr = ', '.join([f'"{expr}"' for expr in expressions])
         else:
             select_method = "selectExpr"
             select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
@@ -476,10 +485,18 @@ def {table_name}():
         
         # Handle custom expressions for silver layer
         custom_expr = op_config.get("custom_expr", "")
+        # Handle NaN values from pandas
+        if pd.isna(custom_expr) or custom_expr == "nan" or custom_expr == "":
+            custom_expr = ""
+        
         if custom_expr:
+            # Split the custom expression by commas, but be careful with function calls and string literals
+            expressions = _parse_expressions_smart(custom_expr)
+            
+            select_expr_args = ', '.join([f'"{expr}"' for expr in expressions])
             source_view_code = f'''@dlt.view
 def bronze_{target_table_name}_source():
-    return spark.readStream.table("{bronze_table}").selectExpr("{custom_expr}")'''
+    return spark.readStream.table("{bronze_table}").selectExpr({select_expr_args})'''
         else:
             source_view_code = f'''@dlt.view
 def bronze_{target_table_name}_source():
@@ -492,6 +509,33 @@ def bronze_{target_table_name}_source():
         for key, value in op_config.items():
             if key not in ["source_path", "target_table", "custom_expr"]:
                 dlt_options[key] = value
+        
+        # If we have custom expressions, we need to update the DLT options to use mapped column names
+        if custom_expr:
+            # Parse the custom expression to extract column mappings using smart parsing
+            column_mappings = {}
+            expressions = _parse_expressions_smart(custom_expr)
+            
+            for expr in expressions:
+                if ' as ' in expr:
+                    # Extract original and mapped column names
+                    original, mapped = expr.split(' as ', 1)
+                    original = original.strip()
+                    mapped = mapped.strip()
+                    column_mappings[original] = mapped
+            
+            # Update track_history_except_column_list if it exists
+            if 'track_history_except_column_list' in dlt_options:
+                original_columns = dlt_options['track_history_except_column_list']
+                if isinstance(original_columns, list):
+                    # Map original column names to new names
+                    mapped_columns = []
+                    for col in original_columns:
+                        if col in column_mappings:
+                            mapped_columns.append(column_mappings[col])
+                        else:
+                            mapped_columns.append(col)
+                    dlt_options['track_history_except_column_list'] = mapped_columns
         
         notebook_content += f'''
 
@@ -529,6 +573,104 @@ dlt.create_auto_cdc_flow(
     
     print(f"Generated combined notebook: {notebook_path}")
 
+def resolve_variables_in_config(df: pd.DataFrame) -> pd.DataFrame:
+    """Resolve bundle variables in the configuration DataFrame."""
+    print("Resolving bundle variables in configuration...")
+    
+    # For now, use hardcoded values that match the dev environment
+    # In a real implementation, this would read from bundle variables
+    catalog_name = "vbdemos"
+    schema_name = "dbdemos_autoloader"
+    volume_name = "raw_data"
+    
+    print(f"  Using catalog: {catalog_name}")
+    print(f"  Using schema: {schema_name}")
+    print(f"  Using volume: {volume_name}")
+    
+    # Create a copy of the dataframe to avoid modifying the original
+    df_resolved = df.copy()
+    
+    # Define variable mapping
+    variable_map = {
+        '${var.catalog_name}': catalog_name,
+        '${var.schema_name}': schema_name,
+        '${var.volume_name}': volume_name
+    }
+    
+    # Replace variables in all string columns using simple string replacement
+    for column in df_resolved.columns:
+        if df_resolved[column].dtype == 'object':  # String columns
+            for old, new in variable_map.items():
+                df_resolved[column] = df_resolved[column].astype(str).str.replace(old, new)
+    
+    print("  Variable resolution completed")
+    return df_resolved
+
+def _parse_expressions_smart(custom_expr):
+    """
+    Smart expression parser that handles:
+    - Function calls with parentheses
+    - String literals with commas
+    - Nested quotes and escapes
+    - Complex SQL expressions
+    """
+    expressions = []
+    current_expr = ""
+    paren_count = 0
+    in_string = False
+    string_char = None
+    i = 0
+    
+    while i < len(custom_expr):
+        char = custom_expr[i]
+        
+        if not in_string:
+            # Not inside a string literal
+            if char in ['"', "'"]:
+                # Start of string literal
+                in_string = True
+                string_char = char
+                current_expr += char
+            elif char == ',' and paren_count == 0:
+                # Comma at top level - split expression
+                expressions.append(current_expr.strip())
+                current_expr = ""
+            elif char == '(':
+                paren_count += 1
+                current_expr += char
+            elif char == ')':
+                paren_count -= 1
+                current_expr += char
+            else:
+                current_expr += char
+        else:
+            # Inside a string literal
+            if char == string_char:
+                # Check for escaped quote
+                if i + 1 < len(custom_expr) and custom_expr[i + 1] == string_char:
+                    # Escaped quote - add both characters and skip next
+                    current_expr += char + char
+                    i += 1
+                else:
+                    # End of string literal
+                    in_string = False
+                    string_char = None
+                    current_expr += char
+            elif char == '\\' and i + 1 < len(custom_expr):
+                # Escaped character - add both characters and skip next
+                current_expr += char + custom_expr[i + 1]
+                i += 1
+            else:
+                current_expr += char
+        
+        i += 1
+    
+    # Add the last expression if any
+    if current_expr.strip():
+        expressions.append(current_expr.strip())
+    
+    return expressions
+
 def main():
     """Main function to generate notebooks for all pipeline groups"""
     
@@ -540,6 +682,9 @@ def main():
     
     # Load configuration
     df = pd.read_csv(config_file, sep='\t')
+    
+    # Resolve variables in the configuration
+    df = resolve_variables_in_config(df)
     
     # Group by pipeline_group
     pipeline_groups = df.groupby('pipeline_group')

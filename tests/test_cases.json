@@ -1,0 +1,179 @@
+{
+  "expression_parser_test_cases": {
+    "description": "Comprehensive test cases for expression parsing logic",
+    "version": "1.0.0",
+    "test_categories": {
+      "basic_expressions": {
+        "description": "Basic comma-separated expressions",
+        "cases": [
+          {
+            "input": "col1, col2, col3",
+            "expected": ["col1", "col2", "col3"],
+            "description": "Simple comma separation"
+          },
+          {
+            "input": "col1 as alias1, col2 as alias2",
+            "expected": ["col1 as alias1", "col2 as alias2"],
+            "description": "Expressions with aliases"
+          }
+        ]
+      },
+      "function_calls": {
+        "description": "Function calls with parentheses",
+        "cases": [
+          {
+            "input": "COALESCE(col1, col2) as result",
+            "expected": ["COALESCE(col1, col2) as result"],
+            "description": "Basic COALESCE function"
+          },
+          {
+            "input": "CASE WHEN col1 IS NULL THEN col2 ELSE col3 END as result",
+            "expected": ["CASE WHEN col1 IS NULL THEN col2 ELSE col3 END as result"],
+            "description": "CASE statement"
+          },
+          {
+            "input": "CONCAT(col1, col2, col3) as full_name",
+            "expected": ["CONCAT(col1, col2, col3) as full_name"],
+            "description": "CONCAT function with multiple parameters"
+          }
+        ]
+      },
+      "string_literals_with_commas": {
+        "description": "String literals containing commas (critical edge case)",
+        "cases": [
+          {
+            "input": "CASE WHEN col1 = \",\" THEN col2 ELSE col3 END as result",
+            "expected": ["CASE WHEN col1 = \",\" THEN col2 ELSE col3 END as result"],
+            "description": "CASE with comma in string literal"
+          },
+          {
+            "input": "CONCAT(col1, \", \", col2) as result",
+            "expected": ["CONCAT(col1, \", \", col2) as result"],
+            "description": "CONCAT with comma in string literal"
+          },
+          {
+            "input": "REGEXP_REPLACE(col1, \"[^a-zA-Z0-9,]\", \"_\") as cleaned",
+            "expected": ["REGEXP_REPLACE(col1, \"[^a-zA-Z0-9,]\", \"_\") as cleaned"],
+            "description": "Regex with comma in character class"
+          }
+        ]
+      },
+      "nested_functions": {
+        "description": "Nested function calls",
+        "cases": [
+          {
+            "input": "COALESCE(CASE WHEN col1 = 1 THEN col2 ELSE col3 END, col4) as result",
+            "expected": ["COALESCE(CASE WHEN col1 = 1 THEN col2 ELSE col3 END, col4) as result"],
+            "description": "COALESCE with nested CASE"
+          },
+          {
+            "input": "CONCAT(COALESCE(col1, \"default\"), \"_\", col2) as result",
+            "expected": ["CONCAT(COALESCE(col1, \"default\"), \"_\", col2) as result"],
+            "description": "CONCAT with nested COALESCE"
+          }
+        ]
+      },
+      "window_functions": {
+        "description": "Window functions with OVER clauses",
+        "cases": [
+          {
+            "input": "ROW_NUMBER() OVER (PARTITION BY col1 ORDER BY col2) as rn",
+            "expected": ["ROW_NUMBER() OVER (PARTITION BY col1 ORDER BY col2) as rn"],
+            "description": "ROW_NUMBER window function"
+          },
+          {
+            "input": "LAG(col1, 1) OVER (PARTITION BY col2 ORDER BY col3) as prev_val",
+            "expected": ["LAG(col1, 1) OVER (PARTITION BY col2 ORDER BY col3) as prev_val"],
+            "description": "LAG window function"
+          }
+        ]
+      },
+      "json_functions": {
+        "description": "JSON functions with complex paths",
+        "cases": [
+          {
+            "input": "GET_JSON_OBJECT(col1, \"$.field\") as json_field",
+            "expected": ["GET_JSON_OBJECT(col1, \"$.field\") as json_field"],
+            "description": "Basic JSON field extraction"
+          },
+          {
+            "input": "GET_JSON_OBJECT(col1, \"$.field,with,commas\") as json_field",
+            "expected": ["GET_JSON_OBJECT(col1, \"$.field,with,commas\") as json_field"],
+            "description": "JSON field with commas in path"
+          }
+        ]
+      },
+      "real_world_examples": {
+        "description": "Real-world examples from actual configurations",
+        "cases": [
+          {
+            "input": "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation, COALESCE(updated_at, created_at) as sequence_ts, current_timestamp() as _ingestion_timestamp",
+            "expected": [
+              "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation",
+              "COALESCE(updated_at, created_at) as sequence_ts",
+              "current_timestamp() as _ingestion_timestamp"
+            ],
+            "description": "Product catalog CDC pipeline bronze layer"
+          },
+          {
+            "input": "product_id, product_name as product_title, category as product_category, price as unit_price, description as product_description, status as product_status, created_at as effective_start_date, updated_at as last_modified_date, deleted_at as soft_delete_date, cdc_operation, sequence_ts",
+            "expected": [
+              "product_id",
+              "product_name as product_title",
+              "category as product_category",
+              "price as unit_price",
+              "description as product_description",
+              "status as product_status",
+              "created_at as effective_start_date",
+              "updated_at as last_modified_date",
+              "deleted_at as soft_delete_date",
+              "cdc_operation",
+              "sequence_ts"
+            ],
+            "description": "Product catalog CDC pipeline silver layer"
+          }
+        ]
+      },
+      "edge_cases": {
+        "description": "Edge cases and potential failure points",
+        "cases": [
+          {
+            "input": "",
+            "expected": [],
+            "description": "Empty expression"
+          },
+          {
+            "input": "col1",
+            "expected": ["col1"],
+            "description": "Single expression"
+          },
+          {
+            "input": "col1, col2,",
+            "expected": ["col1", "col2"],
+            "description": "Trailing comma"
+          },
+          {
+            "input": ", col1, col2",
+            "expected": ["", "col1", "col2"],
+            "description": "Leading comma"
+          }
+        ]
+      }
+    }
+  },
+  "regression_tests": {
+    "description": "Tests to catch regressions in expression parsing",
+    "known_issues": [
+      {
+        "issue": "Commas in string literals break parsing",
+        "fixed_in": "1.0.0",
+        "test_case": "CASE WHEN col1 = \",\" THEN col2 ELSE col3 END as result"
+      },
+      {
+        "issue": "Nested function calls not handled properly",
+        "fixed_in": "1.0.0",
+        "test_case": "COALESCE(CASE WHEN col1 = 1 THEN col2 ELSE col3 END, col4) as result"
+      }
+    ]
+  }
+}

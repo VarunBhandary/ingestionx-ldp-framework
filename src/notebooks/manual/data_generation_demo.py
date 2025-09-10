@@ -70,11 +70,27 @@ print("   • generate_inventory_data() - Inventory data with archive handling")
 print("   • generate_shipment_data() - Shipment data with schema evolution")
 print("   • cleanup_generated_data() - Reset all demo data")
 
-# Configuration - Using Databricks Volumes
-# Note: These should match the paths in your TSV configuration file
-CATALOG = "vbdemos"  # Change this to your catalog name
-SCHEMA = "dbdemos_autoloader"  # Change this to your schema name
-VOLUME_NAME = "raw_data"
+# Configuration - Using Databricks Widgets for Environment-Specific Values
+# These widgets can be set via bundle parameters or manually in the UI
+
+# Create widgets for environment-specific configuration
+dbutils.widgets.text("catalog_name", "main", "Catalog Name")
+dbutils.widgets.text("schema_name", "autoloader_demo", "Schema Name") 
+dbutils.widgets.text("volume_name", "raw_data", "Volume Name")
+
+# Get values from widgets
+CATALOG = dbutils.widgets.get("catalog_name")
+SCHEMA = dbutils.widgets.get("schema_name")
+VOLUME_NAME = dbutils.widgets.get("volume_name")
+
+# Validate that all required parameters are provided
+if not all([CATALOG, SCHEMA, VOLUME_NAME]):
+    raise ValueError("Missing required parameters. Please set catalog_name, schema_name, and volume_name widgets.")
+
+print(f"Using configuration:")
+print(f"  Catalog: {CATALOG}")
+print(f"  Schema: {SCHEMA}")
+print(f"  Volume: {VOLUME_NAME}")
 
 # Volume paths
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME_NAME}"
@@ -401,6 +417,7 @@ def generate_inventory_data(date_str, num_products=200, include_corrupt=False):
     try:
         from datetime import datetime, timedelta
         from faker import Faker
+        import pandas as pd
         fake = Faker()
     except ImportError:
         print("Error: Required imports not available. Please run the imports cell first.")
@@ -443,7 +460,20 @@ def generate_inventory_data(date_str, num_products=200, include_corrupt=False):
         
         inventory.append(inventory_record)
     
-    return pd.DataFrame(inventory)
+    df = pd.DataFrame(inventory)
+    
+    # Ensure proper data types for PySpark compatibility
+    df['quantity_on_hand'] = pd.to_numeric(df['quantity_on_hand'], errors='coerce')
+    df['quantity_reserved'] = pd.to_numeric(df['quantity_reserved'], errors='coerce')
+    df['unit_cost'] = pd.to_numeric(df['unit_cost'], errors='coerce')
+    df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
+    df['reorder_level'] = pd.to_numeric(df['reorder_level'], errors='coerce')
+    
+    # Convert date columns to proper datetime
+    df['last_restocked'] = pd.to_datetime(df['last_restocked'], errors='coerce')
+    df['created_ts'] = pd.to_datetime(df['created_ts'], errors='coerce')
+    
+    return df
 
 # Generate inventory data for multiple days
 print("Generating Inventory Data - Multiple Days")
@@ -466,7 +496,7 @@ for days_ago in range(5, 0, -1):
     inventory_file = f"{INVENTORY_PATH}/inventory_{date_str}.csv"
     inventory_data.to_csv(f"{inventory_file}", index=False)
     
-    corrupt_count = len(inventory_data[inventory_data['quantity_on_hand'] == 'INVALID_QUANTITY'])
+    corrupt_count = len(inventory_data[inventory_data['quantity_on_hand'].isna()])
     print(f"Generated inventory data for {date_str}: {len(inventory_data)} records ({corrupt_count} corrupt)")
 
 print(f"All inventory files saved to: {INVENTORY_PATH}")
@@ -892,7 +922,7 @@ def generate_additional_inventory_data(date_str, num_products=150, include_corru
     inventory_file = f"{INVENTORY_PATH}/inventory_{date_str}.csv"
     inventory.to_csv(f"{inventory_file}", index=False)
     
-    corrupt_count = len(inventory[inventory['quantity_on_hand'] == 'INVALID_QUANTITY'])
+    corrupt_count = len(inventory[inventory['quantity_on_hand'].isna()])
     print(f"Generated {len(inventory)} inventory records ({corrupt_count} corrupt)")
     print(f"Saved to: {inventory_file}")
     

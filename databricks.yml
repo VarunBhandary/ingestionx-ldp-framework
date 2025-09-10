@@ -1,12 +1,45 @@
 bundle:
   name: autoloader-framework-pydab
 
+variables:
+  catalog_name:
+    description: "The Unity Catalog catalog name for this environment"
+    default: "main"
+  schema_name:
+    description: "The Unity Catalog schema name for this environment"  
+    default: "autoloader_demo"
+  volume_name:
+    description: "The volume name for this environment"
+    default: "raw_data"
+
 targets:
   dev:
     default: true
     mode: development
     workspace:
       host: https://adb-984752964297111.11.azuredatabricks.net
+    variables:
+      catalog_name: "vbdemos"
+      schema_name: "dbdemos_autoloader"
+      volume_name: "raw_data"
+
+  test:
+    mode: development
+    workspace:
+      host: https://your-test-workspace.databricks.com
+    variables:
+      catalog_name: "test_catalog"
+      schema_name: "autoloader_demo"
+      volume_name: "raw_data"
+
+  prod:
+    mode: production
+    workspace:
+      host: https://your-prod-workspace.databricks.com
+    variables:
+      catalog_name: "prod_catalog"
+      schema_name: "autoloader_demo"
+      volume_name: "raw_data"
 
 experimental:
   python:

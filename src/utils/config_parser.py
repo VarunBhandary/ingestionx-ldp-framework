@@ -26,17 +26,18 @@ class ConfigParser:
         errors = []
         
         required_columns = [
-            'pipeline_type', 'pipeline_group', 'source_type', 'source_path', 'target_table', 'file_format',
-            'trigger_type', 'schedule', 'autoloader_options', 'cluster_size', 'cluster_config', 'email_notifications'
+            'operation_type', 'pipeline_group', 'source_type', 'source_path', 'target_table', 'file_format',
+            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'cluster_config', 'notifications', 'custom_expr'
         ]
         
         # Check required columns
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             errors.append(f"Missing required columns: {missing_columns}")
+            return errors  # Return early if required columns are missing
         
         # Validate source types
-        valid_source_types = ['s3', 'adls', 'unity']
+        valid_source_types = ['file', 'table', 'notebook']
         invalid_source_types = df[~df['source_type'].isin(valid_source_types)]['source_type'].unique()
         if len(invalid_source_types) > 0:
             errors.append(f"Invalid source types: {invalid_source_types}. Valid types: {valid_source_types}")
@@ -53,11 +54,11 @@ class ConfigParser:
         if len(invalid_triggers) > 0:
             errors.append(f"Invalid trigger types: {invalid_triggers}. Valid types: {valid_triggers}")
         
-        # Validate pipeline types
-        valid_pipeline_types = ['dlt', 'notebook']
-        invalid_pipeline_types = df[~df['pipeline_type'].isin(valid_pipeline_types)]['pipeline_type'].unique()
-        if len(invalid_pipeline_types) > 0:
-            errors.append(f"Invalid pipeline types: {invalid_pipeline_types}. Valid types: {valid_pipeline_types}")
+        # Validate operation types
+        valid_operation_types = ['bronze', 'silver', 'gold', 'manual']
+        invalid_operation_types = df[~df['operation_type'].isin(valid_operation_types)]['operation_type'].unique()
+        if len(invalid_operation_types) > 0:
+            errors.append(f"Invalid operation types: {invalid_operation_types}. Valid types: {valid_operation_types}")
         
         # Validate cluster sizes
         valid_cluster_sizes = ['small', 'medium', 'large', 'serverless']
@@ -73,42 +74,46 @@ class ConfigParser:
             cluster_config = row.get('cluster_config', '{}')
             
             # Validate source path based on type
-            if source_type == 'unity':
-                if not source_path.startswith('/Volumes/'):
-                    errors.append(f"Row {idx}: Invalid Unity Catalog path format: {source_path}. Should start with /Volumes/")
-            elif source_type == 's3':
-                if not source_path.startswith('s3://'):
-                    errors.append(f"Row {idx}: Invalid S3 path format: {source_path}. Should start with s3://")
-            elif source_type == 'adls':
-                if not source_path.startswith('abfss://'):
-                    errors.append(f"Row {idx}: Invalid ADLS path format: {source_path}. Should start with abfss://")
+            if source_type == 'file':
+                # File sources should have valid file paths (Unity Catalog volumes, S3, ADLS, etc.)
+                if not (source_path.startswith('/Volumes/') or 
+                       source_path.startswith('s3://') or 
+                       source_path.startswith('abfss://') or
+                       source_path.startswith('src/')):
+                    errors.append(f"Row {idx}: Invalid file path format: {source_path}. Should start with /Volumes/, s3://, abfss://, or src/")
+            elif source_type == 'table':
+                # Table sources should reference existing tables
+                if not ('.' in source_path and not source_path.startswith('/')):
+                    errors.append(f"Row {idx}: Invalid table reference format: {source_path}. Should be in format 'catalog.schema.table'")
+            elif source_type == 'notebook':
+                # Notebook sources should reference notebook files
+                if not source_path.startswith('src/'):
+                    errors.append(f"Row {idx}: Invalid notebook path format: {source_path}. Should start with src/")
             
-            # Validate JSON in autoloader_options
-            if pd.notna(row.get('autoloader_options', '')) and row['autoloader_options']:
+            # Validate JSON in pipeline_config
+            if pd.notna(row.get('pipeline_config', '')) and row['pipeline_config']:
                 try:
-                    options = json.loads(row['autoloader_options'])
+                    options = json.loads(row['pipeline_config'])
                     
                     # Validate schema and checkpoint locations if present
                     if 'schema_location' in options:
                         schema_loc = options['schema_location']
                         if schema_loc:
-                            # Allow Unity Catalog volumes for schema location
-                            if source_type == 'unity' and schema_loc.startswith('/Volumes/'):
-                                pass  # Valid Unity Catalog path
-                            elif not schema_loc.startswith(('s3://', 'abfss://')):
+                            if not (schema_loc.startswith('/Volumes/') or 
+                                   schema_loc.startswith('s3://') or 
+                                   schema_loc.startswith('abfss://')):
                                 errors.append(f"Row {idx}: Invalid schema location format: {schema_loc}")
                     
                     if 'checkpoint_location' in options:
                         checkpoint_loc = options['checkpoint_location']
                         if checkpoint_loc:
-                            # Allow Unity Catalog volumes for checkpoint location
-                            if source_type == 'unity' and checkpoint_loc.startswith('/Volumes/'):
-                                pass  # Valid Unity Catalog path
-                            elif not checkpoint_loc.startswith(('s3://', 'abfss://')):
+                            if not (checkpoint_loc.startswith('/Volumes/') or 
+                                   checkpoint_loc.startswith('s3://') or 
+                                   checkpoint_loc.startswith('abfss://')):
                                 errors.append(f"Row {idx}: Invalid checkpoint location format: {checkpoint_loc}")
                             
                 except json.JSONDecodeError:
-                    errors.append(f"Row {idx}: Invalid JSON in autoloader_options: {row['autoloader_options']}")
+                    errors.append(f"Row {idx}: Invalid JSON in pipeline_config: {row['pipeline_config']}")
             
             # Validate cluster_config JSON
             if pd.notna(cluster_config) and cluster_config and cluster_config.strip() != '':
@@ -125,30 +130,30 @@ class ConfigParser:
                 except json.JSONDecodeError:
                     errors.append(f"Row {idx}: Invalid JSON in cluster_config: {cluster_config}")
             
-            # Validate email_notifications JSON
-            email_notifications = row.get('email_notifications', '{}')
-            if pd.notna(email_notifications) and email_notifications and email_notifications.strip() != '':
+            # Validate notifications JSON
+            notifications = row.get('notifications', '{}')
+            if pd.notna(notifications) and notifications and notifications.strip() != '':
                 try:
-                    notifications = json.loads(email_notifications)
+                    notification_config = json.loads(notifications)
                     
                     # Validate required fields
-                    if 'recipients' not in notifications:
-                        errors.append(f"Row {idx}: email_notifications must contain 'recipients' field")
-                    elif not isinstance(notifications['recipients'], list) or len(notifications['recipients']) == 0:
-                        errors.append(f"Row {idx}: email_notifications.recipients must be a non-empty list")
+                    if 'recipients' not in notification_config:
+                        errors.append(f"Row {idx}: notifications must contain 'recipients' field")
+                    elif not isinstance(notification_config['recipients'], list) or len(notification_config['recipients']) == 0:
+                        errors.append(f"Row {idx}: notifications.recipients must be a non-empty list")
                     
-                    # Validate email_on_success and email_on_failure are boolean
-                    for field in ['email_on_success', 'email_on_failure']:
-                        if field in notifications and not isinstance(notifications[field], bool):
+                    # Validate on_success and on_failure are boolean
+                    for field in ['on_success', 'on_failure']:
+                        if field in notification_config and not isinstance(notification_config[field], bool):
                             errors.append(f"Row {idx}: {field} must be a boolean value")
                     
                     # Validate email addresses format (basic validation)
-                    for email in notifications.get('recipients', []):
+                    for email in notification_config.get('recipients', []):
                         if not isinstance(email, str) or '@' not in email or '.' not in email:
                             errors.append(f"Row {idx}: Invalid email format in recipients: {email}")
                             
                 except json.JSONDecodeError:
-                    errors.append(f"Row {idx}: Invalid JSON in email_notifications: {email_notifications}")
+                    errors.append(f"Row {idx}: Invalid JSON in notifications: {notifications}")
         
         return errors
     

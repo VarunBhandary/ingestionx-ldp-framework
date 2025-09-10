@@ -9,9 +9,9 @@ from databricks.bundles.pipelines import Pipeline, PipelineLibrary, NotebookLibr
 
 @variables
 class Variables:
-    warehouse_id: Variable[str]
-    catalog: Variable[str]
-    schema: Variable[str]
+    catalog_name: Variable[str]
+    schema_name: Variable[str]
+    volume_name: Variable[str]
 
 
 class UnifiedPipelineGenerator:
@@ -22,13 +22,52 @@ class UnifiedPipelineGenerator:
         self.config_file = "config/unified_pipeline_config.tsv"
 
     def load_config(self) -> pd.DataFrame:
-        """Load configuration from unified TSV file."""
+        """Load configuration from unified TSV file and resolve variables."""
         if not os.path.exists(self.config_file):
             raise FileNotFoundError(f"Configuration file {self.config_file} not found")
 
         df = pd.read_csv(self.config_file, sep='\t')
         print(f"Loaded {len(df)} pipeline configurations")
+        
+        # Resolve variables in the configuration
+        df = self._resolve_variables_in_config(df)
+        
         return df
+
+    def _resolve_variables_in_config(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Resolve bundle variables in the configuration DataFrame."""
+        print("Resolving bundle variables in configuration...")
+        
+        # Get variable values from bundle
+        try:
+            # Access variables through bundle context as dictionary
+            catalog_name = self.bundle.variables["catalog_name"]
+            schema_name = self.bundle.variables["schema_name"]
+            volume_name = self.bundle.variables["volume_name"]
+            print(f"  Using catalog: {catalog_name}")
+            print(f"  Using schema: {schema_name}")
+            print(f"  Using volume: {volume_name}")
+        except Exception as e:
+            raise ValueError(f"Failed to access bundle variables: {e}. Make sure variables are defined in databricks.yml")
+        
+        # Create a copy of the dataframe to avoid modifying the original
+        df_resolved = df.copy()
+        
+        # Define variable mapping
+        variable_map = {
+            '${var.catalog_name}': catalog_name,
+            '${var.schema_name}': schema_name,
+            '${var.volume_name}': volume_name
+        }
+        
+        # Replace variables in all string columns using simple string replacement
+        for column in df_resolved.columns:
+            if df_resolved[column].dtype == 'object':  # String columns
+                for old, new in variable_map.items():
+                    df_resolved[column] = df_resolved[column].astype(str).str.replace(old, new)
+        
+        print("  Variable resolution completed")
+        return df_resolved
 
     def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
         """Create a unified pipeline for a pipeline group using static generated notebooks"""
@@ -122,21 +161,16 @@ class UnifiedPipelineGenerator:
                         print(f"   Using target schema: {target_schema} (from {target_table})")
                         break
         
-        # Extract catalog from target table names
+        # Extract catalog from target table names (now resolved from variables)
         target_tables = [row.get('target_table', '') for row in group_rows if row.get('target_table')]
         
-        try:
-            from config.environment_config import get_catalog_for_pipeline
-            catalog = get_catalog_for_pipeline(target_tables)
-            print(f"   Using catalog: {catalog} (extracted from target tables)")
-        except ImportError:
-            # Fallback: extract from first target table
-            if target_tables and '.' in target_tables[0]:
-                catalog = target_tables[0].split('.')[0]
-                print(f"   Using catalog: {catalog} (fallback extraction)")
-            else:
-                catalog = "hive_metastore"  # Safe default
-                print(f"   Using default catalog: {catalog}")
+        if target_tables and '.' in target_tables[0]:
+            catalog = target_tables[0].split('.')[0]
+            print(f"   Using catalog: {catalog} (from resolved target table)")
+        else:
+            # Fallback to bundle variable
+            catalog = self.bundle.variables["catalog_name"]
+            print(f"   Using catalog: {catalog} (from bundle variable)")
         
         # Create the unified pipeline with a resource name for referencing
         pipeline = Pipeline(
