@@ -44,8 +44,7 @@ def shipments_demo():
             .option("multiline", "true")
             .option("cloudFiles.format", "json")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments")
-            .selectExpr("*", 
-                        "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

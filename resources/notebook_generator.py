@@ -86,13 +86,34 @@ schema = {spark_schema_str}'''
         schema_application = '''
             .schema(schema)  # Apply fixed schema for data validation'''
     
+    # Handle custom expressions
+    custom_expr = op_config.get("custom_expr", "")
+    if custom_expr:
+        # Check if custom expression starts with * - if so, use selectExpr with * and remaining expression
+        if custom_expr.strip().startswith('*'):
+            # Use selectExpr() with * as separate argument and the remaining expression
+            select_method = "selectExpr"
+            # Remove * from the expression
+            remaining_expr = custom_expr.strip()[1:].strip()
+            if remaining_expr.startswith(','):
+                remaining_expr = remaining_expr[1:].strip()
+            # Pass * and the remaining expression as separate arguments
+            select_expr = f'"*", "{remaining_expr}"'
+        else:
+            # Use selectExpr() for expressions without *
+            select_method = "selectExpr"
+            select_expr = f'"{custom_expr}"'
+    else:
+        select_method = "selectExpr"
+        select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
+
     # Generate the notebook content
     notebook_content = f'''# Databricks notebook source
 # MAGIC %md
 # MAGIC # {op_name.replace('_', ' ').title()} - Bronze Table
 # MAGIC 
 # MAGIC This notebook ingests data from {source_path} into {target_table}
-# MAGIC {"with fixed schema validation" if schema_definition else "with schema inference"}
+# MAGIC {"with fixed schema validation" if schema_definition else "with schema inference"}{" and custom expressions" if custom_expr else ""}
 
 # COMMAND ----------
 
@@ -118,8 +139,7 @@ def {table_name}():
 {options_code}''' if options_code else ''}
             .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
-            .selectExpr("*", 
-                        "current_timestamp() as _ingestion_timestamp"))
+            .{select_method}({select_expr}))
 
 # COMMAND ----------
 
@@ -153,12 +173,23 @@ def generate_silver_table_notebook(op_name, op_config, notebook_path):
     bronze_table_name = bronze_table.split('.')[-1] if '.' in bronze_table else bronze_table
     target_table_name = target_table.split('.')[-1] if '.' in target_table else target_table
     
+    # Handle custom expressions for silver layer
+    custom_expr = op_config.get("custom_expr", "")
+    if custom_expr:
+        source_view_code = f'''@dlt.view
+def bronze_source_view():
+    return spark.readStream.table("{bronze_table_name}").selectExpr("{custom_expr}")'''
+    else:
+        source_view_code = f'''@dlt.view
+def bronze_source_view():
+    return spark.readStream.table("{bronze_table_name}")'''
+    
     # Generate the notebook content
     notebook_content = f'''# Databricks notebook source
 # MAGIC %md
 # MAGIC # {op_name.replace('_', ' ').title()} - Silver Table SCD Type 2
 # MAGIC 
-# MAGIC This notebook creates SCD Type 2 table from {bronze_table} into {target_table}
+# MAGIC This notebook creates SCD Type 2 table from {bronze_table} into {target_table}{" with custom column mapping" if custom_expr else ""}
 
 # COMMAND ----------
 
@@ -172,9 +203,7 @@ dlt.create_streaming_table("{target_table_name}")
 
 # COMMAND ----------
 
-@dlt.view
-def bronze_source_view():
-    return spark.readStream.table("{bronze_table_name}")
+{source_view_code}
 
 # COMMAND ----------
 
@@ -384,6 +413,27 @@ schema = {spark_schema_str}'''
             schema_application = '''
             .schema(schema)  # Apply fixed schema for data validation'''
         
+        # Handle custom expressions
+        custom_expr = op_config.get("custom_expr", "")
+        if custom_expr:
+            # Check if custom expression starts with * - if so, use selectExpr with * and remaining expression
+            if custom_expr.strip().startswith('*'):
+                # Use selectExpr() with * as separate argument and the remaining expression
+                select_method = "selectExpr"
+                # Remove * from the expression
+                remaining_expr = custom_expr.strip()[1:].strip()
+                if remaining_expr.startswith(','):
+                    remaining_expr = remaining_expr[1:].strip()
+                # Pass * and the remaining expression as separate arguments
+                select_expr = f'"*", "{remaining_expr}"'
+            else:
+                # Use selectExpr() for expressions without *
+                select_method = "selectExpr"
+                select_expr = f'"{custom_expr}"'
+        else:
+            select_method = "selectExpr"
+            select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
+        
         notebook_content += f'''
 
 # COMMAND ----------{schema_code}
@@ -405,8 +455,7 @@ def {table_name}():
 {options_code}''' if options_code else ''}
             .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
-            .selectExpr("*", 
-                        "current_timestamp() as _ingestion_timestamp"))
+            .{select_method}({select_expr}))
 '''
     
     # Add silver layer
@@ -425,12 +474,23 @@ def {table_name}():
         bronze_table_name = bronze_table.split('.')[-1] if '.' in bronze_table else bronze_table
         target_table_name = target_table.split('.')[-1] if '.' in target_table else target_table
         
+        # Handle custom expressions for silver layer
+        custom_expr = op_config.get("custom_expr", "")
+        if custom_expr:
+            source_view_code = f'''@dlt.view
+def bronze_{target_table_name}_source():
+    return spark.readStream.table("{bronze_table}").selectExpr("{custom_expr}")'''
+        else:
+            source_view_code = f'''@dlt.view
+def bronze_{target_table_name}_source():
+    return spark.readStream.table("{bronze_table}")'''
+        
         # Build DLT options from config - only include options that are specified
         dlt_options = {}
         
-        # Add all DLT options from the config (excluding source_path and target_table)
+        # Add all DLT options from the config (excluding source_path, target_table, and custom_expr)
         for key, value in op_config.items():
-            if key not in ["source_path", "target_table"]:
+            if key not in ["source_path", "target_table", "custom_expr"]:
                 dlt_options[key] = value
         
         notebook_content += f'''
@@ -442,9 +502,7 @@ dlt.create_streaming_table("{target_table}")
 
 # COMMAND ----------
 
-@dlt.view
-def bronze_{target_table_name}_source():
-    return spark.readStream.table("{bronze_table}")
+{source_view_code}
 
 # COMMAND ----------
 
@@ -520,6 +578,10 @@ def main():
                     'file_format': row['file_format']
                 }
                 
+                # Add custom_expr if present
+                if pd.notna(row.get('custom_expr', '')) and row['custom_expr']:
+                    operations_config[op_name]['custom_expr'] = row['custom_expr']
+                
                 # Add all autoloader options from the pipeline_config
                 for key, value in pipeline_config.items():
                     if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"] or key == "schema":
@@ -539,6 +601,10 @@ def main():
                     'source_path': row['source_path'],  # This should be the bronze table
                     'target_table': row['target_table']
                 }
+                
+                # Add custom_expr if present
+                if pd.notna(row.get('custom_expr', '')) and row['custom_expr']:
+                    operations_config[op_name]['custom_expr'] = row['custom_expr']
                 
                 # Add all DLT options from the pipeline_config
                 for key, value in pipeline_config.items():

@@ -46,8 +46,7 @@ def customers_demo():
             .option("cloudFiles.format", "csv")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
-            .selectExpr("*", 
-                        "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

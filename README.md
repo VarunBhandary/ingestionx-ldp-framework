@@ -82,6 +82,17 @@ The framework includes comprehensive demo scenarios that showcase real-world Aut
   - **Same DLT capabilities** as full bronze+silver pipelines
 - **Use Cases**: Data warehouse migrations, external system integration, bronze table reuse
 
+### **7. Product Catalog CDC Demo (Change Data Capture with Custom Expressions)**
+- **Scenario**: CDC data with create, updated, deleted timestamps
+- **Format**: CSV files with CDC timestamp columns
+- **Features**:
+  - **CDC timestamp handling** with `created_at`, `updated_at`, `deleted_at` columns
+  - **Custom expressions** for CDC operation detection in bronze layer
+  - **Business column mapping** in silver layer (technical to business names)
+  - **SCD Type 2 processing** with CDC-aware AUTO CDC
+  - **Soft delete support** with proper timestamp handling
+- **Auto Loader Options**: Fixed schema, custom expressions, checkpoint location
+
 ## 📁 **Demo Directory Structure**
 
 The framework uses a clean, organized directory structure following [Auto Loader best practices](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/options):
@@ -148,7 +159,31 @@ src/notebooks/
 
 ### **TSV Configuration Format**
 ```tsv
-operation_type	pipeline_group	source_type	file_format	source_path	target_table	trigger_type	schedule	pipeline_config	cluster_size	notifications
+operation_type	pipeline_group	source_type	file_format	source_path	target_table	trigger_type	schedule	pipeline_config	cluster_size	notifications	custom_expr
+```
+
+### **Custom Expressions Support**
+
+The framework supports **custom expressions** via the `custom_expr` column for both bronze and silver operations:
+
+#### **Bronze Layer Custom Expressions**
+- **CDC Operation Detection**: Convert timestamps to CDC operations
+- **Data Preprocessing**: Add computed columns, filters, transformations
+- **Audit Columns**: Add ingestion timestamps and metadata
+
+**Example**:
+```tsv
+bronze	product_catalog_cdc_pipeline	file	csv	/Volumes/.../product_catalog_cdc	vbdemos.adls_bronze.product_catalog_cdc	time	0 0 6 * * ?	{"schema": {...}}	medium	{"on_success": true}	"CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation, COALESCE(updated_at, created_at) as sequence_ts, current_timestamp() as _ingestion_timestamp"
+```
+
+#### **Silver Layer Custom Expressions**
+- **Business Column Mapping**: Map technical to business-friendly names
+- **Data Enrichment**: Add computed fields and transformations
+- **Column Selection**: Choose specific columns for processing
+
+**Example**:
+```tsv
+silver	product_catalog_cdc_pipeline	table		vbdemos.adls_bronze.product_catalog_cdc	vbdemos.adls_silver.product_catalog_cdc_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}	medium	{"on_success": true}	"product_id, product_name as product_title, category as product_category, price as unit_price, description as product_description, status as product_status, created_at as effective_start_date, updated_at as last_modified_date, deleted_at as soft_delete_date, cdc_operation, sequence_ts"
 ```
 
 ### **Operation Types**

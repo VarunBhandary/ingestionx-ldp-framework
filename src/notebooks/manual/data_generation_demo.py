@@ -82,6 +82,7 @@ CUSTOMER_PATH = f"{VOLUME_PATH}/customers"
 TRANSACTION_PATH = f"{VOLUME_PATH}/transactions"
 INVENTORY_PATH = f"{VOLUME_PATH}/inventory"
 SHIPMENT_PATH = f"{VOLUME_PATH}/shipments"
+PRODUCT_CATALOG_CDC_PATH = f"{VOLUME_PATH}/product_catalog_cdc"
 
 # Create volume and directories
 try:
@@ -94,6 +95,7 @@ try:
     dbutils.fs.mkdirs(TRANSACTION_PATH)
     dbutils.fs.mkdirs(INVENTORY_PATH)
     dbutils.fs.mkdirs(SHIPMENT_PATH)
+    dbutils.fs.mkdirs(PRODUCT_CATALOG_CDC_PATH)
     
     # Create checkpoint directories for Auto Loader state tracking
     # Note: Schema directories are not needed for fixed schema demos (customer, inventory)
@@ -104,6 +106,7 @@ try:
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/transactions")
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/inventory")
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/shipments")
+    dbutils.fs.mkdirs(f"{VOLUME_PATH}/checkpoint/product_catalog_cdc")
     
     # Schema directories (only needed for schema inference demos)
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/schema/transactions")
@@ -118,11 +121,13 @@ try:
     print(f"   • Transaction data: {TRANSACTION_PATH}")
     print(f"   • Inventory data: {INVENTORY_PATH}")
     print(f"   • Shipment data: {SHIPMENT_PATH}")
+    print(f"   • Product Catalog CDC data: {PRODUCT_CATALOG_CDC_PATH}")
     print(f"🔄 Checkpoint directories (for Auto Loader state tracking):")
     print(f"   • {VOLUME_PATH}/checkpoint/customers")
     print(f"   • {VOLUME_PATH}/checkpoint/transactions")
     print(f"   • {VOLUME_PATH}/checkpoint/inventory")
     print(f"   • {VOLUME_PATH}/checkpoint/shipments")
+    print(f"   • {VOLUME_PATH}/checkpoint/product_catalog_cdc")
     print(f"📋 Schema directories (for schema inference demos only):")
     print(f"   • {VOLUME_PATH}/schema/transactions")
     print(f"   • {VOLUME_PATH}/schema/shipments")
@@ -602,6 +607,133 @@ display(pd.DataFrame([shipment_batch3[0]]))
 
 # MAGIC %md
 # MAGIC ---
+# MAGIC ## Scenario 5: Product Catalog CDC (Change Data Capture with Timestamps)
+# MAGIC 
+# MAGIC **Features Demonstrated:**
+# MAGIC - CDC data with create, updated, deleted timestamps
+# MAGIC - Custom expressions for CDC operation detection
+# MAGIC - Business column mapping in silver layer
+# MAGIC - SCD Type 2 with CDC-aware processing
+# MAGIC 
+# MAGIC **Data Characteristics:**
+# MAGIC - CSV format with CDC timestamp columns
+# MAGIC - Realistic product catalog data
+# MAGIC - Multiple CDC operations (INSERT, UPDATE, DELETE)
+# MAGIC - Custom expressions for preprocessing and mapping
+
+# COMMAND ----------
+
+def generate_product_catalog_cdc_data(batch_number=1, num_products=100, include_deletes=True):
+    """
+    Generate product catalog CDC data with create, updated, deleted timestamps
+    
+    Args:
+        batch_number: Batch number for file naming
+        num_products: Number of products to generate
+        include_deletes: Whether to include soft deleted records
+    """
+    
+    # Ensure imports are available (fallback if imports cell wasn't run)
+    try:
+        from datetime import datetime, timedelta
+        from faker import Faker
+        fake = Faker()
+    except ImportError:
+        print("Error: Required imports not available. Please run the imports cell first.")
+        return None
+    
+    products = []
+    categories = ['Electronics', 'Clothing', 'Home & Garden', 'Sports', 'Books', 'Toys', 'Automotive', 'Health & Beauty']
+    statuses = ['active', 'inactive', 'discontinued']
+    
+    base_date = datetime.now() - timedelta(days=90)
+    
+    for i in range(num_products):
+        product_id = f"PROD_{5000 + i:06d}"
+        
+        # Generate base product data
+        created_at = base_date + timedelta(days=random.randint(0, 90))
+        updated_at = created_at + timedelta(hours=random.randint(0, 24))
+        
+        product = {
+            'product_id': product_id,
+            'product_name': fake.catch_phrase(),
+            'category': random.choice(categories),
+            'price': round(random.uniform(10.0, 2000.0), 2),
+            'description': fake.text(max_nb_chars=200),
+            'status': random.choice(statuses),
+            'created_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'deleted_at': None
+        }
+        
+        # For batch 2+, include updates and soft deletes
+        if batch_number > 1:
+            if include_deletes and random.random() < 0.15:  # 15% soft deletes
+                # Soft delete an existing product
+                product['product_id'] = f"PROD_{5000 + random.randint(0, 99):06d}"
+                product['deleted_at'] = (datetime.now() - timedelta(days=random.randint(1, 30))).strftime('%Y-%m-%d %H:%M:%S')
+                product['status'] = 'inactive'
+                product['updated_at'] = product['deleted_at']
+            elif random.random() < 0.4:  # 40% updates
+                # Update an existing product
+                product['product_id'] = f"PROD_{5000 + random.randint(0, 99):06d}"
+                product['price'] = round(random.uniform(10.0, 2000.0), 2)
+                product['status'] = random.choice(['active', 'inactive'])
+                product['updated_at'] = (datetime.now() - timedelta(days=random.randint(1, 30))).strftime('%Y-%m-%d %H:%M:%S')
+                product['created_at'] = (datetime.now() - timedelta(days=random.randint(30, 90))).strftime('%Y-%m-%d %H:%M:%S')
+        
+        products.append(product)
+    
+    return pd.DataFrame(products)
+
+# Generate initial product catalog CDC data (Batch 1)
+print("Generating Product Catalog CDC Data - Batch 1 (Initial Load)")
+product_cdc_batch1 = generate_product_catalog_cdc_data(batch_number=1, num_products=100, include_deletes=False)
+
+# Save to CSV
+product_cdc_file1 = f"{PRODUCT_CATALOG_CDC_PATH}/product_catalog_cdc_batch_001.csv"
+product_cdc_batch1.to_csv(f"{product_cdc_file1}", index=False)
+
+print(f"Generated {len(product_cdc_batch1)} product records")
+print(f"Saved to: {product_cdc_file1}")
+print(f"Sample data:")
+display(product_cdc_batch1.head())
+
+# COMMAND ----------
+
+# Generate product catalog CDC data updates and soft deletes (Batch 2)
+print("Generating Product Catalog CDC Data - Batch 2 (Updates & Soft Deletes)")
+product_cdc_batch2 = generate_product_catalog_cdc_data(batch_number=2, num_products=50, include_deletes=True)
+
+# Save to CSV
+product_cdc_file2 = f"{PRODUCT_CATALOG_CDC_PATH}/product_catalog_cdc_batch_002.csv"
+product_cdc_batch2.to_csv(f"{product_cdc_file2}", index=False)
+
+print(f"Generated {len(product_cdc_batch2)} product update/delete records")
+print(f"Saved to: {product_cdc_file2}")
+print(f"Sample updates and deletes:")
+display(product_cdc_batch2.head())
+
+# COMMAND ----------
+
+# Generate additional product catalog CDC data (Batch 3)
+print("Generating Product Catalog CDC Data - Batch 3 (More Updates)")
+product_cdc_batch3 = generate_product_catalog_cdc_data(batch_number=3, num_products=30, include_deletes=True)
+
+# Save to CSV
+product_cdc_file3 = f"{PRODUCT_CATALOG_CDC_PATH}/product_catalog_cdc_batch_003.csv"
+product_cdc_batch3.to_csv(f"{product_cdc_file3}", index=False)
+
+print(f"Generated {len(product_cdc_batch3)} product update/delete records")
+print(f"Saved to: {product_cdc_file3}")
+print(f"Sample updates and deletes:")
+display(product_cdc_batch3.head())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
 # MAGIC ## Summary and Next Steps
 # MAGIC 
 # MAGIC ### Generated Data Summary
@@ -612,12 +744,14 @@ display(pd.DataFrame([shipment_batch3[0]]))
 # MAGIC | **Transaction Data** | CSV | 2 files | SCD Type 1, Soft deletes |
 # MAGIC | **Inventory Data** | CSV | 5 files | Daily files, Corrupt data handling |
 # MAGIC | **Shipment Data** | JSON | 3 files | Schema evolution, File notifications |
+# MAGIC | **Product Catalog CDC** | CSV | 3 files | CDC timestamps, Custom expressions, Business mapping |
 # MAGIC 
 # MAGIC ### File Locations (Databricks Volumes)
 # MAGIC - **Customer Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers/`
 # MAGIC - **Transaction Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions/`
 # MAGIC - **Inventory Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory/`
 # MAGIC - **Shipment Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/shipments/`
+# MAGIC - **Product Catalog CDC Data**: `/Volumes/vbdemos/dbdemos_autoloader/raw_data/product_catalog_cdc/`
 # MAGIC 
 # MAGIC **Note**: These paths match the TSV configuration. Update the CATALOG, SCHEMA, and VOLUME_NAME variables above if you need different paths.
 # MAGIC 
