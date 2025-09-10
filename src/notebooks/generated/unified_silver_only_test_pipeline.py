@@ -40,7 +40,7 @@ def bronze_customers_demo_silver_only_scd2_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.customers_demo_silver_only_scd2",
     source="bronze_customers_demo_silver_only_scd2_source",
-    **{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email", "phone_number", "address", "city", "state", "zip_code", "country", "customer_tier"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}
+    **{"keys": ["customer_id"], "track_history_except_column_list": ["created_at", "is_active"], "stored_as_scd_type": "2", "sequence_by": "updated_at"}
 )
 
 

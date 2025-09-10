@@ -21,7 +21,7 @@ from pyspark.sql.types import *
 
 # COMMAND ----------
 # Define fixed schema for data validation
-schema = StructType([StructField('customer_id', StringType(), False), StructField('first_name', StringType(), True), StructField('last_name', StringType(), True), StructField('email', StringType(), True), StructField('phone_number', StringType(), True), StructField('address', StringType(), True), StructField('city', StringType(), True), StructField('state', StringType(), True), StructField('zip_code', StringType(), True), StructField('country', StringType(), True), StructField('customer_tier', StringType(), True), StructField('registration_date', DateType(), True), StructField('update_ts', TimestampType(), True)])
+schema = StructType([StructField('customer_id', StringType(), False), StructField('created_at', TimestampType(), True), StructField('is_active', BooleanType(), True), StructField('updated_at', TimestampType(), True)])
 
 @dlt.table(
     name="vbdemos.adls_bronze.customers_demo",
@@ -50,6 +50,37 @@ def customers_demo():
 
 
 # COMMAND ----------
+# Define fixed schema for data validation
+schema = StructType([StructField('customer_id', StringType(), False), StructField('preference_category', StringType(), True), StructField('preference_value', StringType(), True), StructField('preference_score', DoubleType(), True), StructField('is_active', BooleanType(), True), StructField('created_at', TimestampType(), True), StructField('updated_at', TimestampType(), True)])
+
+@dlt.table(
+    name="vbdemos.adls_bronze.customer_preferences_demo",
+    table_properties={
+        "quality": "bronze",
+        "operation": "bronze_customer_preferences_demo",
+        "pipelines.autoOptimize.optimizeWrite": "true",
+        "pipelines.autoOptimize.autoCompact": "true",
+        "delta.enableChangeDataFeed": "true"
+    }
+)
+def customer_preferences_demo():
+    # Read from source using autoloader and add audit columns using selectExpr
+    return (spark.readStream
+            .format("cloudFiles")
+            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/customer_preferences")
+            .option("cloudFiles.maxFilesPerTrigger", "50")
+            .option("cloudFiles.allowOverwrites", "false")
+            .option("cloudFiles.useManagedFileEvents", "true")
+            .option("cloudFiles.schemaEvolutionMode", "rescue")
+            .option("cloudFiles.validateOptions", "false")
+            .option("multiline", "true")
+            .option("cloudFiles.format", "json")
+            .schema(schema)  # Apply fixed schema for data validation
+            .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customer_preferences")
+            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
+
+
+# COMMAND ----------
 
 # SILVER LAYER - SCD Type 2 with Auto CDC
 
@@ -71,7 +102,7 @@ def bronze_customers_demo_scd2_source():
 dlt.create_auto_cdc_flow(
     target="vbdemos.adls_silver.customers_demo_scd2",
     source="bronze_customers_demo_scd2_source",
-    **{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email", "phone_number", "address", "city", "state", "zip_code", "country", "customer_tier"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}
+    **{"keys": ["customer_id"], "track_history_except_column_list": ["created_at", "is_active"], "stored_as_scd_type": "2", "sequence_by": "updated_at"}
 )
 
 

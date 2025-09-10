@@ -13,9 +13,11 @@ This framework provides a unified approach to data pipeline management in Databr
 
 ### **📋 Prerequisites**
 
+- **Python**: 3.10 or above (see `pyproject.toml` for exact requirements)
 - **Databricks Runtime**: 16.4 LTS or above (required for `cloudFiles.cleanSource` functionality)
 - **Unity Catalog**: Enabled workspace with appropriate permissions
 - **Volumes**: Access to create and manage volumes in your catalog/schema
+- **Package Manager**: `uv` (recommended) or `pip`
 
 ## 🎯 **Auto Loader Demo Scenarios**
 
@@ -370,8 +372,29 @@ cloudFiles.checkpointLocation: /Volumes/my_company/analytics/data_lake/checkpoin
 git clone <repository-url>
 cd autloader-framework-pydab
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies using uv (recommended)
+uv sync
+
+# Or install dependencies using pip
+pip install -e .
+```
+
+### **Development Setup**
+```bash
+# Install with development dependencies using uv
+uv sync --dev
+
+# Or install with development dependencies using pip
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run code formatting
+black .
+
+# Run linting
+flake8 .
 ```
 
 ### **2. Configuration**
