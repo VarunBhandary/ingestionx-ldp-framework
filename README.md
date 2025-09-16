@@ -161,7 +161,37 @@ src/notebooks/
 
 ### **TSV Configuration Format**
 ```tsv
-operation_type	pipeline_group	source_type	file_format	source_path	target_table	trigger_type	schedule	pipeline_config	cluster_size	notifications	custom_expr
+operation_type	pipeline_group	source_type	file_format	source_path	target_table	trigger_type	schedule	pipeline_config	cluster_size	notifications	custom_expr	parameters
+```
+
+### **Parameters Support for Manual Operations**
+
+The framework supports **user-defined parameters** via the `parameters` column for manual operations, enabling dynamic configuration of notebook behavior:
+
+#### **Parameter Features**
+- **Variable Support**: Use the same variable syntax as the rest of the framework (`${var.catalog_name}`, `${var.schema_name}`, `${var.volume_name}`)
+- **Type Safety**: Supports string, number, and boolean parameter types
+- **JSON Format**: Parameters are defined as JSON objects in the TSV configuration
+- **Default Values**: Notebooks can provide default values for parameters
+- **Environment Flexibility**: Parameters can be different per environment (dev/staging/prod)
+
+#### **Parameter Configuration**
+```tsv
+manual	my_pipeline	notebook		src/notebooks/manual/my_step1.py	output_table1	time	0 0 9 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/my_step1.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"batch_size": 1000, "debug_mode": true, "catalog": "${var.catalog_name}", "schema": "${var.schema_name}"}
+```
+
+#### **Notebook Usage**
+```python
+# Access user-defined parameters with defaults
+batch_size = dbutils.widgets.get("batch_size", "500")
+debug_mode = dbutils.widgets.get("debug_mode", "false").lower() == "true"
+catalog = dbutils.widgets.get("catalog", "default")
+schema = dbutils.widgets.get("schema", "default")
+
+# Use parameters in processing logic
+if debug_mode:
+    print(f"Processing batch size: {batch_size}")
+    print(f"Target catalog: {catalog}")
 ```
 
 ### **Custom Expressions Support**
@@ -207,8 +237,11 @@ gold	customer_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdem
 
 #### **Manual Operations**
 ```tsv
-manual	my_pipeline	notebook		src/notebooks/manual/my_step1.py	output_table1	time	0 0 9 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/my_step1.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
-manual	my_pipeline	notebook		src/notebooks/manual/my_step2.py	output_table2	time	0 0 9 * * ?	{"order": 2, "notebook_path": "src/notebooks/manual/my_step2.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+# Step 1: Data preparation with parameters
+manual	my_pipeline	notebook		src/notebooks/manual/my_step1.py	output_table1	time	0 0 9 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/my_step1.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"batch_size": 1000, "debug_mode": true, "catalog": "${var.catalog_name}"}
+
+# Step 2: Data transformation with parameters
+manual	my_pipeline	notebook		src/notebooks/manual/my_step2.py	output_table2	time	0 0 9 * * ?	{"order": 2, "notebook_path": "src/notebooks/manual/my_step2.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"environment": "production", "retry_count": 3, "volume": "${var.volume_name}"}
 ```
 
 ## ⚡ **Compute Options**
@@ -243,16 +276,16 @@ silver	product_pipeline	table		vbdemos.adls_bronze.products	vbdemos.adls_silver.
 gold	product_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdemos.adls_gold.product_analytics	time	0 0 */20 * * ?	{"notebook_path": "src/notebooks/generated/gold_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
 ```
 
-### **2. Manual Pipeline (Custom Notebooks)**
+### **2. Manual Pipeline (Custom Notebooks with Parameters)**
 ```tsv
-# Step 1: Data preparation
-manual	custom_pipeline	notebook		src/notebooks/manual/step1.py	table1	time	0 0 8 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/step1.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+# Step 1: Data preparation with parameters
+manual	custom_pipeline	notebook		src/notebooks/manual/step1.py	table1	time	0 0 8 * * ?	{"order": 1, "notebook_path": "src/notebooks/manual/step1.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"batch_size": 1000, "debug_mode": true, "catalog": "${var.catalog_name}"}
 
-# Step 2: Data transformation
-manual	custom_pipeline	notebook		src/notebooks/manual/step2.py	table2	time	0 0 8 * * ?	{"order": 2, "notebook_path": "src/notebooks/manual/step2.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+# Step 2: Data transformation with parameters
+manual	custom_pipeline	notebook		src/notebooks/manual/step2.py	table2	time	0 0 8 * * ?	{"order": 2, "notebook_path": "src/notebooks/manual/step2.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"environment": "production", "retry_count": 3, "volume": "${var.volume_name}"}
 
-# Step 3: Final analytics
-manual	custom_pipeline	notebook		src/notebooks/manual/step3.py	table3	time	0 0 8 * * ?	{"order": 3, "notebook_path": "src/notebooks/manual/step3.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+# Step 3: Final analytics with parameters
+manual	custom_pipeline	notebook		src/notebooks/manual/step3.py	table3	time	0 0 8 * * ?	{"order": 3, "notebook_path": "src/notebooks/manual/step3.py"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}	{"analytics_mode": "advanced", "report_format": "json", "catalog": "${var.catalog_name}", "schema": "${var.schema_name}"}
 ```
 
 ## ⚙️ **Configuration Setup**

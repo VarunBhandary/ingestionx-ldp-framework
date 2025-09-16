@@ -150,6 +150,8 @@ class TestIntegration:
             df['notifications'] = '{}'
         if 'custom_expr' not in df.columns:
             df['custom_expr'] = ''
+        if 'parameters' not in df.columns:
+            df['parameters'] = '{}'
         
         errors = parser.validate_config(df)
         assert len(errors) == 0

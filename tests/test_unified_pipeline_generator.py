@@ -458,6 +458,98 @@ class TestUnifiedPipelineGenerator:
         mock_job_class.assert_called_once()
         assert result == mock_job
     
+    def test_manual_job_with_parameters(self):
+        """Test creation of manual job with parameters"""
+        # Create test data with parameters
+        test_data = [
+            {
+                'operation_type': 'manual',
+                'pipeline_group': 'test_manual_job',
+                'source_path': 'src/notebooks/manual/test_notebook.py',
+                'target_table': '',
+                'file_format': '',
+                'pipeline_config': '{"order": 1}',
+                'cluster_size': 'medium',
+                'notifications': '{"on_success": true, "on_failure": true}',
+                'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}'
+            }
+        ]
+        
+        self.create_test_config(test_data)
+        
+        # Test with UnifiedPipelineGenerator
+        generator = UnifiedPipelineGenerator(self.mock_bundle)
+        generator.config_file = self.test_config_file
+        
+        df = generator.load_config()
+        
+        # Verify parameters are resolved
+        assert 'test_catalog' in df.iloc[0]['parameters']
+        assert '${var.catalog_name}' not in df.iloc[0]['parameters']
+        
+        # Test manual job creation
+        group_rows = df.to_dict('records')
+        job = generator.create_manual_job('test_manual_job', group_rows)
+        
+        # Verify job was created
+        assert job is not None
+        assert len(job.tasks) == 1
+        
+        # Verify parameters are passed to notebook task
+        task = job.tasks[0]
+        assert task.notebook_task is not None
+        base_parameters = task.notebook_task.base_parameters
+        
+        # Check framework parameters
+        assert base_parameters['pipeline_group'] == 'test_manual_job'
+        assert base_parameters['operation_type'] == 'manual'
+        assert base_parameters['operation_index'] == 0
+        assert base_parameters['total_operations'] == 1
+        
+        # Check user parameters
+        assert base_parameters['batch_size'] == 1000
+        assert base_parameters['debug_mode'] == True
+        assert base_parameters['catalog'] == 'test_catalog'
+    
+    def test_manual_job_with_invalid_parameters(self):
+        """Test manual job creation with invalid JSON parameters"""
+        # Create test data with invalid JSON parameters
+        test_data = [
+            {
+                'operation_type': 'manual',
+                'pipeline_group': 'test_manual_job',
+                'source_path': 'src/notebooks/manual/test_notebook.py',
+                'target_table': '',
+                'file_format': '',
+                'pipeline_config': '{"order": 1}',
+                'cluster_size': 'medium',
+                'notifications': '{"on_success": true, "on_failure": true}',
+                'parameters': '{"invalid": json}'  # Invalid JSON
+            }
+        ]
+        
+        self.create_test_config(test_data)
+        
+        # Test with UnifiedPipelineGenerator
+        generator = UnifiedPipelineGenerator(self.mock_bundle)
+        generator.config_file = self.test_config_file
+        
+        df = generator.load_config()
+        group_rows = df.to_dict('records')
+        
+        # Should not raise exception, but should log warning
+        job = generator.create_manual_job('test_manual_job', group_rows)
+        
+        # Verify job was created with only framework parameters
+        assert job is not None
+        task = job.tasks[0]
+        base_parameters = task.notebook_task.base_parameters
+        
+        # Should only have framework parameters
+        assert 'pipeline_group' in base_parameters
+        assert 'operation_type' in base_parameters
+        assert 'batch_size' not in base_parameters  # Invalid parameter not added
+    
     def test_load_resources_integration(self):
         """Test the main load_resources function integration"""
         test_data = [

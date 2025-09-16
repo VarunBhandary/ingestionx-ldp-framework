@@ -31,10 +31,20 @@ operation_type = dbutils.widgets.get("operation_type")
 operation_index = dbutils.widgets.get("operation_index")
 total_operations = dbutils.widgets.get("total_operations")
 
+# Access user-defined parameters (passed from job configuration)
+batch_size = dbutils.widgets.get("batch_size")
+debug_mode = dbutils.widgets.get("debug_mode").lower() == "true"
+catalog = dbutils.widgets.get("catalog")
+schema = dbutils.widgets.get("schema")
+
 print(f"Pipeline Group: {pipeline_group}")
 print(f"Operation Type: {operation_type}")
 print(f"Operation Index: {operation_index}")
 print(f"Total Operations: {total_operations}")
+print(f"Batch Size: {batch_size}")
+print(f"Debug Mode: {debug_mode}")
+print(f"Catalog: {catalog}")
+print(f"Schema: {schema}")
 
 # COMMAND ----------
 
@@ -49,9 +59,16 @@ print("  - Validating data format")
 print("  - Applying basic data quality checks")
 print("  - Storing raw data")
 
-# Simulate some processing time
+# Use parameters in processing logic
+if debug_mode:
+    print(f"  - DEBUG: Processing batch size: {batch_size}")
+    print(f"  - DEBUG: Target catalog: {catalog}")
+    print(f"  - DEBUG: Target schema: {schema}")
+
+# Simulate some processing time based on batch size
 import time
-time.sleep(2)
+processing_time = min(3, int(batch_size) / 1000)  # Scale processing time with batch size
+time.sleep(processing_time)
 
 print("✅ Bronze layer processing completed successfully!")
 
@@ -63,10 +80,13 @@ print("✅ Bronze layer processing completed successfully!")
 # COMMAND ----------
 
 print("\n📊 Data Quality Metrics:")
-print("  - Records processed: 1,000")
+print(f"  - Records processed: {batch_size}")
 print("  - Data quality score: 95%")
-print("  - Processing time: 2.3 seconds")
+print(f"  - Processing time: {processing_time:.1f} seconds")
 print("  - Memory used: 128 MB")
+if debug_mode:
+    print(f"  - DEBUG: Catalog used: {catalog}")
+    print(f"  - DEBUG: Schema used: {schema}")
 
 # COMMAND ----------
 

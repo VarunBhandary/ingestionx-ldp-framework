@@ -27,7 +27,7 @@ class ConfigParser:
         
         required_columns = [
             'operation_type', 'pipeline_group', 'source_type', 'source_path', 'target_table', 'file_format',
-            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'cluster_config', 'notifications', 'custom_expr'
+            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'cluster_config', 'notifications', 'custom_expr', 'parameters'
         ]
         
         # Check required columns
@@ -42,9 +42,12 @@ class ConfigParser:
         if len(invalid_source_types) > 0:
             errors.append(f"Invalid source types: {invalid_source_types}. Valid types: {valid_source_types}")
         
-        # Validate file formats
-        valid_formats = ['json', 'parquet', 'csv', 'avro', 'orc']
-        invalid_formats = df[~df['file_format'].isin(valid_formats)]['file_format'].unique()
+        # Validate file formats (allow empty for manual operations)
+        valid_formats = ['json', 'parquet', 'csv', 'avro', 'orc', '']
+        # For manual operations, file_format can be empty
+        manual_mask = df['operation_type'] == 'manual'
+        non_manual_df = df[~manual_mask]
+        invalid_formats = non_manual_df[~non_manual_df['file_format'].isin(valid_formats)]['file_format'].unique()
         if len(invalid_formats) > 0:
             errors.append(f"Invalid file formats: {invalid_formats}. Valid formats: {valid_formats}")
         
@@ -154,6 +157,43 @@ class ConfigParser:
                             
                 except json.JSONDecodeError:
                     errors.append(f"Row {idx}: Invalid JSON in notifications: {notifications}")
+            
+            # Validate parameters JSON (only for manual operations)
+            parameters = row.get('parameters', '{}')
+            operation_type = row.get('operation_type', '')
+            
+            if operation_type == 'manual' and pd.notna(parameters) and parameters and parameters.strip() != '':
+                try:
+                    parameters_config = json.loads(parameters)
+                    
+                    # Validate that parameters is a dictionary
+                    if not isinstance(parameters_config, dict):
+                        errors.append(f"Row {idx}: parameters must be a JSON object (dictionary)")
+                    
+                    # Validate parameter values are basic types (string, number, boolean)
+                    for param_name, param_value in parameters_config.items():
+                        if not isinstance(param_value, (str, int, float, bool)):
+                            errors.append(f"Row {idx}: Parameter '{param_name}' must be a string, number, or boolean")
+                        
+                        # Validate parameter names (basic validation)
+                        if not isinstance(param_name, str) or not param_name.strip():
+                            errors.append(f"Row {idx}: Parameter names must be non-empty strings")
+                            
+                except json.JSONDecodeError:
+                    errors.append(f"Row {idx}: Invalid JSON in parameters: {parameters}")
+            elif operation_type != 'manual' and pd.notna(parameters) and parameters and parameters.strip() != '':
+                # Check if it's an empty JSON object
+                try:
+                    params_dict = json.loads(parameters)
+                    if isinstance(params_dict, dict) and len(params_dict) == 0:
+                        # Empty JSON object is fine for non-manual operations
+                        pass
+                    else:
+                        # Non-empty parameters should only be used with manual operations
+                        errors.append(f"Row {idx}: parameters column should only be used with manual operation type")
+                except json.JSONDecodeError:
+                    # Invalid JSON - this will be caught by the manual operation validation above
+                    pass
         
         return errors
     
@@ -179,7 +219,8 @@ class ConfigParser:
                 'autoloader_options': json.loads(row['autoloader_options']) if pd.notna(row.get('autoloader_options', '')) and row['autoloader_options'] else {},
                 'cluster_size': row['cluster_size'],
                 'cluster_config': json.loads(row['cluster_config']) if pd.notna(row.get('cluster_config', '')) and row['cluster_config'].strip() else {},
-                'email_notifications': json.loads(row['email_notifications']) if pd.notna(row.get('email_notifications', '')) and row['email_notifications'].strip() else {}
+                'email_notifications': json.loads(row['email_notifications']) if pd.notna(row.get('email_notifications', '')) and row['email_notifications'].strip() else {},
+                'parameters': json.loads(row['parameters']) if pd.notna(row.get('parameters', '')) and row['parameters'].strip() else {}
             }
             configs.append(config)
         
@@ -209,7 +250,8 @@ class ConfigParser:
             'autoloader_options': json.dumps(config.get('autoloader_options', {})),
             'cluster_size': config.get('cluster_size', 'medium'),
             'cluster_config': json.dumps(config.get('cluster_config', {})),
-            'email_notifications': json.dumps(config.get('email_notifications', {}))
+            'email_notifications': json.dumps(config.get('email_notifications', {})),
+            'parameters': json.dumps(config.get('parameters', {}))
         }])
         
         updated_df = pd.concat([df, new_row], ignore_index=True)

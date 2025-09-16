@@ -241,16 +241,30 @@ class UnifiedPipelineGenerator:
             
             # Create notebook task
             task_key = f"manual_notebook_{pipeline_group}_{i}"
+            
+            # Start with framework parameters
+            base_parameters = {
+                "pipeline_group": pipeline_group,
+                "operation_type": "manual",
+                "operation_index": i,
+                "total_operations": len(manual_operations)
+            }
+            
+            # Add user-defined parameters if they exist
+            user_parameters = manual_op.get('parameters', '{}')
+            if user_parameters and pd.notna(user_parameters):
+                try:
+                    user_params = json.loads(user_parameters)
+                    base_parameters.update(user_params)
+                    print(f"      Added user parameters: {list(user_params.keys())}")
+                except json.JSONDecodeError as e:
+                    print(f"      Warning: Invalid JSON in parameters for {notebook_path}: {e}")
+            
             task = Task(
                 task_key=task_key,
                 notebook_task=NotebookTask(
                     notebook_path=notebook_path,
-                    base_parameters={
-                        "pipeline_group": pipeline_group,
-                        "operation_type": "manual",
-                        "operation_index": i,
-                        "total_operations": len(manual_operations)
-                    }
+                    base_parameters=base_parameters
                 ),
                 run_if="ALL_SUCCESS"
             )

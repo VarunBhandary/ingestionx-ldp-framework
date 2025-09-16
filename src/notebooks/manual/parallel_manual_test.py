@@ -32,10 +32,18 @@ operation_type = dbutils.widgets.get("operation_type")
 operation_index = dbutils.widgets.get("operation_index")
 total_operations = dbutils.widgets.get("total_operations")
 
+# Access user-defined parameters (with defaults)
+parallel_mode = dbutils.widgets.get("parallel_mode").lower() == "true"
+max_workers = int(dbutils.widgets.get("max_workers"))
+catalog = dbutils.widgets.get("catalog")
+
 print(f"Pipeline Group: {pipeline_group}")
 print(f"Operation Type: {operation_type}")
 print(f"Operation Index: {operation_index}")
 print(f"Total Operations: {total_operations}")
+print(f"Parallel Mode: {parallel_mode}")
+print(f"Max Workers: {max_workers}")
+print(f"Catalog: {catalog}")
 
 # COMMAND ----------
 
@@ -50,9 +58,20 @@ print("  - Depends on operation 1 (bronze layer) completion")
 print("  - Processing independent data stream")
 print("  - Applying specialized transformations")
 
-# Simulate some processing time
+# Use parameters in processing logic
+if parallel_mode:
+    print(f"  - PARALLEL MODE: Using {max_workers} workers")
+    print(f"  - PARALLEL MODE: Processing catalog {catalog}")
+else:
+    print("  - SEQUENTIAL MODE: Processing one task at a time")
+
+# Simulate some processing time based on parallel mode
 import time
-time.sleep(2)
+if parallel_mode:
+    processing_time = 1.5  # Faster with parallel processing
+else:
+    processing_time = 2.5  # Slower with sequential processing
+time.sleep(processing_time)
 
 print("✅ Parallel task processing completed successfully!")
 
@@ -65,7 +84,10 @@ print("✅ Parallel task processing completed successfully!")
 
 print("\n📊 Parallel Task Metrics:")
 print("  - Records processed: 500")
-print("  - Processing time: 2.1 seconds")
+print(f"  - Processing time: {processing_time:.1f} seconds")
+print(f"  - Parallel mode: {parallel_mode}")
+print(f"  - Max workers: {max_workers}")
+print(f"  - Catalog: {catalog}")
 print("  - Memory used: 192 MB")
 print("  - CPU utilization: 75%")
 print("  - Parallel execution: True")

@@ -60,7 +60,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
     
@@ -128,7 +129,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -156,7 +158,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -184,7 +187,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -212,7 +216,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -240,7 +245,8 @@ class TestConfigParser:
                 'cluster_size': 'invalid_size',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -268,7 +274,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -296,7 +303,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true}',  # Missing recipients
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -307,6 +315,125 @@ class TestConfigParser:
         
         assert len(errors) > 0
         assert any("notifications must contain 'recipients' field" in error for error in errors)
+    
+    def test_validate_config_parameters_valid(self):
+        """Test validation of valid parameters for manual operations"""
+        test_data = [
+            {
+                'operation_type': 'manual',
+                'pipeline_group': 'test_manual',
+                'source_type': 'notebook',
+                'source_path': 'src/notebooks/manual/test.py',
+                'target_table': 'test_table',
+                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
+                'pipeline_config': '{"order": 1}',
+                'cluster_size': 'medium',
+                'cluster_config': '{}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
+                'custom_expr': '',
+                'parameters': '{}',
+                'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}'
+            }
+        ]
+        
+        df = pd.DataFrame(test_data)
+        parser = ConfigParser()
+        errors = parser.validate_config(df)
+        
+        # Should have no errors
+        assert len(errors) == 0
+    
+    def test_validate_config_parameters_invalid_json(self):
+        """Test validation of invalid JSON parameters"""
+        test_data = [
+            {
+                'operation_type': 'manual',
+                'pipeline_group': 'test_manual',
+                'source_type': 'notebook',
+                'source_path': 'src/notebooks/manual/test.py',
+                'target_table': 'test_table',
+                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
+                'pipeline_config': '{"order": 1}',
+                'cluster_size': 'medium',
+                'cluster_config': '{}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
+                'custom_expr': '',
+                'parameters': '{}',
+                'parameters': '{"invalid": json}'  # Invalid JSON
+            }
+        ]
+        
+        df = pd.DataFrame(test_data)
+        parser = ConfigParser()
+        errors = parser.validate_config(df)
+        
+        # Should have JSON error
+        assert len(errors) > 0
+        assert any("Invalid JSON in parameters" in error for error in errors)
+    
+    def test_validate_config_parameters_wrong_operation_type(self):
+        """Test validation that parameters are only allowed for manual operations"""
+        test_data = [
+            {
+                'operation_type': 'bronze',  # Not manual
+                'pipeline_group': 'test_bronze',
+                'source_type': 'file',
+                'source_path': '/path/to/file',
+                'target_table': 'test_table',
+                'file_format': 'csv',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
+                'pipeline_config': '{}',
+                'cluster_size': 'medium',
+                'cluster_config': '{}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
+                'custom_expr': '',
+                'parameters': '{}',
+                'parameters': '{"batch_size": 1000}'  # Should not be allowed for bronze
+            }
+        ]
+        
+        df = pd.DataFrame(test_data)
+        parser = ConfigParser()
+        errors = parser.validate_config(df)
+        
+        # Should have error about parameters only for manual operations
+        assert len(errors) > 0
+        assert any("parameters column should only be used with manual operation type" in error for error in errors)
+    
+    def test_validate_config_parameters_invalid_types(self):
+        """Test validation of invalid parameter types"""
+        test_data = [
+            {
+                'operation_type': 'manual',
+                'pipeline_group': 'test_manual',
+                'source_type': 'notebook',
+                'source_path': 'src/notebooks/manual/test.py',
+                'target_table': 'test_table',
+                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
+                'pipeline_config': '{"order": 1}',
+                'cluster_size': 'medium',
+                'cluster_config': '{}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
+                'custom_expr': '',
+                'parameters': '{}',
+                'parameters': '{"invalid_param": [1, 2, 3]}'  # List not allowed
+            }
+        ]
+        
+        df = pd.DataFrame(test_data)
+        parser = ConfigParser()
+        errors = parser.validate_config(df)
+        
+        # Should have error about invalid parameter type
+        assert len(errors) > 0
+        assert any("must be a string, number, or boolean" in error for error in errors)
     
     def test_validate_config_invalid_email_format(self):
         """Test validation with invalid email format"""
@@ -324,7 +451,8 @@ class TestConfigParser:
                 'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["invalid-email"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -359,7 +487,8 @@ class TestConfigParser:
                     'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -387,7 +516,8 @@ class TestConfigParser:
                 'cluster_size': 'serverless',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -415,7 +545,8 @@ class TestConfigParser:
                 'cluster_size': 'serverless',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -446,7 +577,8 @@ class TestConfigParser:
                     'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -484,7 +616,8 @@ class TestConfigParser:
                     'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -514,7 +647,8 @@ class TestConfigParser:
                     'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -544,7 +678,8 @@ class TestConfigParser:
                     'cluster_size': 'medium',
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -577,7 +712,8 @@ class TestConfigParser:
                     'cluster_size': size,
                     'cluster_config': cluster_config,
                     'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                    'custom_expr': ''
+                    'custom_expr': '',
+                'parameters': '{}'
                 }
             ]
             
@@ -604,7 +740,8 @@ class TestConfigParser:
                 'cluster_size': 'invalid_size',  # Invalid cluster size
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true}',  # Missing recipients
-                'custom_expr': ''
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
