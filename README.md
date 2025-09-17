@@ -412,22 +412,54 @@ uv sync
 pip install -e .
 ```
 
+### **Package Management**
+This project uses **uv** as the primary package manager for fast, reliable dependency management:
+
+```bash
+# Install all dependencies
+uv sync
+
+# Install with development dependencies (includes pyspark, pytest, black, flake8)
+uv sync --group dev
+
+# Add new dependencies
+uv add package-name
+
+# Add development dependencies
+uv add --group dev package-name
+
+# Run commands in the virtual environment
+uv run python script.py
+uv run pytest
+uv run databricks bundle validate --profile dev
+```
+
 ### **Development Setup**
 ```bash
-# Install with development dependencies using uv
-uv sync --dev
+# Install with development dependencies using uv (recommended)
+uv sync --group dev
 
 # Or install with development dependencies using pip
 pip install -e ".[dev]"
 
-# Run tests
-pytest
+# Run all tests
+uv run pytest
+
+# Run specific test files
+uv run pytest tests/test_integration.py
+uv run pytest tests/test_config_parser.py
+
+# Run tests with verbose output
+uv run pytest -v
 
 # Run code formatting
-black .
+uv run black .
 
 # Run linting
-flake8 .
+uv run flake8 .
+
+# Run standalone configuration validation
+uv run python src/utils/validate_config.py --summary
 ```
 
 ### **2. Configuration**
@@ -659,9 +691,68 @@ This function:
 - ✅ Recreates clean directory structure
 - ✅ Regenerates initial schema files
 
+## 🧪 **Testing**
+
+The framework includes comprehensive test coverage with 103 tests across multiple components.
+
+### **Test Categories**
+- **Integration Tests** (8 tests): End-to-end pipeline generation and validation
+- **Unit Tests** (69 tests): Individual component testing
+  - Config Parser (26 tests): TSV configuration validation
+  - Unified Pipeline Generator (31 tests): Resource generation logic
+  - Notebook Generator (12 tests): Notebook generation functionality
+- **Schema Converter Tests** (26 tests): JSON schema to PySpark conversion
+
+### **Running Tests**
+```bash
+# Run all tests
+uv run pytest
+
+# Run with verbose output
+uv run pytest -v
+
+# Run specific test categories
+uv run pytest tests/test_integration.py      # Integration tests
+uv run pytest tests/test_config_parser.py    # Configuration validation
+uv run pytest tests/test_schema_converter.py # Schema conversion
+
+# Run tests with coverage
+uv run pytest --cov=src --cov-report=html
+
+# Run tests in parallel (faster execution)
+uv run pytest -n auto
+```
+
+### **Test Dependencies**
+The test suite requires additional dependencies that are automatically installed with the dev group:
+- **pyspark**: For schema converter tests and PySpark type validation
+- **pytest**: Testing framework
+- **black**: Code formatting
+- **flake8**: Code linting
+
 ## ✅ **Configuration Validation**
 
 The framework provides comprehensive validation at multiple levels to ensure your configuration is correct before deployment.
+
+### **🚀 Quick Validation (Recommended)**
+
+```bash
+# Validate with summary (shows configuration overview)
+uv run python src/utils/validate_config.py --summary
+
+# Basic validation (errors only)
+uv run python src/utils/validate_config.py
+
+# Shell script validation
+./scripts/validate.sh --summary
+```
+
+**What you get:**
+- ✅ Instant validation feedback
+- ✅ Configuration summary and statistics
+- ✅ Detailed error messages with row numbers
+- ✅ Pre-hook validation during bundle operations
+- ✅ CI/CD integration ready
 
 ### **Bundle Validation Process**
 
@@ -713,17 +804,26 @@ Error: expected string, found map
 ### **Validation Commands**
 
 ```bash
-# Validate configuration
-databricks bundle validate --profile dev
+# Quick validation with summary
+uv run python src/utils/validate_config.py --summary
+
+# Basic validation
+uv run python src/utils/validate_config.py
+
+# Shell script validation
+./scripts/validate.sh --summary
+
+# Databricks bundle validation (includes pre-hook validation)
+uv run databricks bundle validate --profile dev
 
 # Check configuration parsing
-python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
+uv run python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
 
 # Validate JSON configuration
-python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
+uv run python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
 
 # Test resource generation
-python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
+uv run python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
 ```
 
 ### **Error Resolution**
@@ -795,13 +895,13 @@ grep -E "CATALOG =|SCHEMA =|VOLUME_NAME =" src/notebooks/manual/data_generation_
 grep -E "/Volumes/" config/unified_pipeline_config.tsv | head -5
 
 # Test configuration parsing
-python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
+uv run python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
 
 # Validate JSON configuration
-python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
+uv run python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
 
 # Test resource generation
-python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
+uv run python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
 ```
 
 ## 📚 **Documentation**

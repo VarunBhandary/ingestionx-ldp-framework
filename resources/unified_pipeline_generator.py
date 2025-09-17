@@ -32,6 +32,9 @@ class UnifiedPipelineGenerator:
         # Resolve variables in the configuration
         df = self._resolve_variables_in_config(df)
         
+        # Pre-hook validation: Validate configuration after variable resolution
+        self._validate_config_pre_hook(df)
+        
         return df
 
     def _resolve_variables_in_config(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -60,14 +63,56 @@ class UnifiedPipelineGenerator:
             '${var.volume_name}': volume_name
         }
         
-        # Replace variables in all string columns using simple string replacement
+        # Replace variables in all string columns, but be careful with NaN values
         for column in df_resolved.columns:
             if df_resolved[column].dtype == 'object':  # String columns
                 for old, new in variable_map.items():
-                    df_resolved[column] = df_resolved[column].astype(str).str.replace(old, new)
+                    # Only replace if the value is not NaN
+                    mask = df_resolved[column].notna()
+                    df_resolved.loc[mask, column] = df_resolved.loc[mask, column].astype(str).str.replace(old, new)
         
         print("  Variable resolution completed")
         return df_resolved
+
+    def _validate_config_pre_hook(self, df: pd.DataFrame) -> None:
+        """Pre-hook validation to catch configuration errors early."""
+        import sys
+        
+        # Import the enhanced validator for comprehensive validation
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from utils.validate_config import ConfigValidator
+        
+        # Create a temporary validator instance for validation
+        temp_validator = ConfigValidator(self.config_file)
+        
+        # Run comprehensive validation on the provided DataFrame
+        is_valid, errors = temp_validator.validate_dataframe(df)
+        
+        if errors:
+            # Use stderr for error reporting to ensure it shows up
+            error_msg = "❌ Configuration validation failed!\n"
+            error_msg += "Pre-hook validation errors:\n"
+            for i, error in enumerate(errors, 1):
+                error_msg += f"  {i}. {error}\n"
+            error_msg += "\n💡 Fix these errors before running bundle operations.\n"
+            error_msg += "   You can run: python src/utils/validate_config.py\n"
+            error_msg += "   Or run: ./scripts/validate.sh\n"
+            error_msg += "\n" + "="*60 + "\n"
+            error_msg += "DETAILED ERROR REPORT:\n"
+            error_msg += "="*60 + "\n"
+            for i, error in enumerate(errors, 1):
+                error_msg += f"ERROR {i}: {error}\n"
+            error_msg += "="*60 + "\n"
+            
+            # Print to stderr to ensure it shows up
+            print(error_msg, file=sys.stderr)
+            
+            # Also include errors in the exception message
+            error_list = "\n".join([f"  {i}. {error}" for i, error in enumerate(errors, 1)])
+            raise ValueError(f"Configuration validation failed with {len(errors)} errors:\n{error_list}\n\nRun 'python src/utils/validate_config.py' for detailed validation.")
+        
+        print("✅ Pre-hook validation passed!", file=sys.stderr)
 
     def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
         """Create a unified pipeline for a pipeline group using static generated notebooks"""

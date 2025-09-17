@@ -65,31 +65,31 @@ class TestIntegration:
                 'operation_type': 'bronze',
                 'pipeline_group': 'customer_demo_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/customers',
                 'target_table': '${var.catalog_name}.adls_bronze.customers_demo',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "customer_id", "type": "string", "nullable": false}, {"name": "first_name", "type": "string", "nullable": true}]}, "header": "true", "cloudFiles.checkpointLocation": "/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/checkpoint/customers"}',
                 'cluster_size': 'medium',
-                'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': ' ',
+                'parameters': '{}'
             },
             {
                 'operation_type': 'silver',
                 'pipeline_group': 'customer_demo_pipeline',
-                'source_type': '',
+                'source_type': 'table',
+                'file_format': '',
                 'source_path': '',
                 'target_table': '${var.catalog_name}.adls_silver.customers_demo_scd2',
-                'file_format': '',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"keys": ["customer_id"], "track_history_except_column_list": ["first_name", "last_name", "email"], "stored_as_scd_type": "2", "sequence_by": "update_ts"}',
                 'cluster_size': 'medium',
-                'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
-                'custom_expr': ''
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         
@@ -125,14 +125,16 @@ class TestIntegration:
                 'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/test_catalog/test_schema/test_volume/test',
                 'target_table': 'test_catalog.adls_bronze.test_table',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"header": "true"}',
                 'cluster_size': 'medium',
-                'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}'
+                'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         
@@ -207,10 +209,19 @@ class TestIntegration:
         # Create configuration with variables
         test_data = [
             {
+                'operation_type': 'bronze',
+                'pipeline_group': 'test_pipeline',
+                'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/test',
                 'target_table': '${var.catalog_name}.adls_bronze.test_table',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"checkpointLocation": "/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/checkpoint"}',
-                'email_notifications': '{"recipients": ["admin@${var.catalog_name}.com"]}'
+                'cluster_size': 'medium',
+                'notifications': '{"recipients": ["admin@${var.catalog_name}.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         
@@ -234,8 +245,8 @@ class TestIntegration:
         assert '${var.catalog_name}' not in df.iloc[0]['pipeline_config']
         assert 'test_catalog' in df.iloc[0]['pipeline_config']
         
-        assert '${var.catalog_name}' not in df.iloc[0]['email_notifications']
-        assert 'test_catalog' in df.iloc[0]['email_notifications']
+        assert '${var.catalog_name}' not in df.iloc[0]['notifications']
+        assert 'test_catalog' in df.iloc[0]['notifications']
     
     def test_error_handling_integration(self):
         """Test error handling across components"""
@@ -275,27 +286,31 @@ class TestIntegration:
                 'operation_type': 'bronze',
                 'pipeline_group': 'product_catalog_cdc_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/product_catalog_cdc',
                 'target_table': '${var.catalog_name}.adls_bronze.product_catalog_cdc',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "product_id", "type": "string", "nullable": false}, {"name": "product_name", "type": "string", "nullable": true}, {"name": "category", "type": "string", "nullable": true}, {"name": "price", "type": "double", "nullable": true}, {"name": "description", "type": "string", "nullable": true}, {"name": "status", "type": "string", "nullable": true}, {"name": "created_at", "type": "timestamp", "nullable": true}, {"name": "updated_at", "type": "timestamp", "nullable": true}, {"name": "deleted_at", "type": "timestamp", "nullable": true}]}, "cloudFiles.checkpointLocation": "/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/checkpoint/product_catalog_cdc", "cloudFiles.maxFilesPerTrigger": "100", "cloudFiles.allowOverwrites": "false", "header": "true", "cloudFiles.rescuedDataColumn": "corrupt_data", "cloudFiles.validateOptions": "false"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}'
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             },
             {
                 'operation_type': 'silver',
                 'pipeline_group': 'product_catalog_cdc_pipeline',
-                'source_type': '',
+                'source_type': 'table',
+                'file_format': '',
                 'source_path': '',
                 'target_table': '${var.catalog_name}.adls_silver.product_catalog_cdc_scd2',
-                'file_format': '',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"keys": ["product_id"], "track_history_except_column_list": ["product_name", "category", "price", "description", "status"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}'
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         
@@ -332,15 +347,17 @@ class TestIntegration:
             {
                 'operation_type': 'manual',
                 'pipeline_group': 'data_quality_checks',
-                'source_type': '',
+                'source_type': 'notebook',
+                'file_format': '',
                 'source_path': '',
                 'target_table': '',
-                'file_format': '',
                 'trigger_type': 'time',
                 'schedule': '0 0 2 * * ?',
                 'pipeline_config': '{"notebook_path": "/Workspace/Users/test/data_quality_checks", "order": 1}',
                 'cluster_size': 'small',
-                'email_notifications': '{"on_success": true, "on_failure": true, "recipients": ["data-quality@company.com"]}'
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["data-quality@company.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         
@@ -374,27 +391,31 @@ class TestIntegration:
                 'operation_type': 'bronze',
                 'pipeline_group': 'customer_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/customers',
                 'target_table': '${var.catalog_name}.adls_bronze.customers',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"header": "true"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             },
             {
                 'operation_type': 'manual',
                 'pipeline_group': 'data_validation',
-                'source_type': '',
+                'source_type': 'notebook',
+                'file_format': '',
                 'source_path': '',
                 'target_table': '',
-                'file_format': '',
                 'trigger_type': 'time',
                 'schedule': '0 0 8 * * ?',
                 'pipeline_config': '{"notebook_path": "/Workspace/Users/test/data_validation", "order": 2}',
                 'cluster_size': 'small',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': ' ',
+                'parameters': '{}'
             }
         ]
         

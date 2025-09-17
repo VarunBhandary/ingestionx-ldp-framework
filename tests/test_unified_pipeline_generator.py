@@ -67,17 +67,19 @@ class TestUnifiedPipelineGenerator:
         """Test successful configuration loading"""
         test_data = [
             {
-                'pipeline_type': 'bronze',
+                'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/test',
                 'target_table': '${var.catalog_name}.adls_bronze.test_table',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "id", "type": "string", "nullable": false}]}}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true, "on_failure": true}'
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -85,7 +87,7 @@ class TestUnifiedPipelineGenerator:
         df = self.generator.load_config()
         
         assert len(df) == 1
-        assert df.iloc[0]['pipeline_type'] == 'bronze'
+        assert df.iloc[0]['operation_type'] == 'bronze'
         assert df.iloc[0]['pipeline_group'] == 'test_pipeline'
         # Check that variables were resolved
         assert '${var.catalog_name}' not in df.iloc[0]['source_path']
@@ -170,24 +172,34 @@ class TestUnifiedPipelineGenerator:
         
         group_rows = [
             {
-                'pipeline_type': 'bronze',
+                'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
+                'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/test_catalog/test_schema/test_volume/test',
                 'target_table': 'test_catalog.adls_bronze.test_table',
-                'file_format': 'csv',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "id", "type": "string", "nullable": false}]}}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}',
+                'custom_expr': '',
+                'parameters': '{}'
             },
             {
-                'pipeline_type': 'silver',
+                'operation_type': 'silver',
                 'pipeline_group': 'test_pipeline',
+                'source_type': 'notebook',
+                'file_format': '',
                 'source_path': '',
                 'target_table': 'test_catalog.adls_silver.test_table',
-                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"keys": ["id"], "track_history_except_column_list": ["name"], "stored_as_scd_type": "2"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}',
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         
@@ -210,14 +222,14 @@ class TestUnifiedPipelineGenerator:
         
         group_rows = [
             {
-                'pipeline_type': 'bronze',
+                'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
                 'source_path': '/Volumes/test_catalog/test_schema/test_volume/test',
                 'target_table': 'test_catalog.adls_bronze.test_table',
                 'file_format': 'csv',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "id", "type": "string", "nullable": false}]}}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}'
             }
         ]
         
@@ -235,14 +247,14 @@ class TestUnifiedPipelineGenerator:
         
         group_rows = [
             {
-                'pipeline_type': 'silver',
+                'operation_type': 'silver',
                 'pipeline_group': 'test_pipeline',
                 'source_path': '',
                 'target_table': 'test_catalog.adls_silver.test_table',
                 'file_format': '',
                 'pipeline_config': '{"keys": ["id"], "track_history_except_column_list": ["name"], "stored_as_scd_type": "2"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}'
             }
         ]
         
@@ -260,34 +272,34 @@ class TestUnifiedPipelineGenerator:
         
         group_rows = [
             {
-                'pipeline_type': 'bronze',
+                'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
                 'source_path': '/Volumes/test_catalog/test_schema/test_volume/test',
                 'target_table': 'test_catalog.adls_bronze.test_table',
                 'file_format': 'csv',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "id", "type": "string", "nullable": false}]}}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}'
             },
             {
-                'pipeline_type': 'silver',
+                'operation_type': 'silver',
                 'pipeline_group': 'test_pipeline',
                 'source_path': '',
                 'target_table': 'test_catalog.adls_silver.test_table',
                 'file_format': '',
                 'pipeline_config': '{"keys": ["id"], "track_history_except_column_list": ["name"], "stored_as_scd_type": "2"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}'
             },
             {
-                'pipeline_type': 'gold',
+                'operation_type': 'gold',
                 'pipeline_group': 'test_pipeline',
                 'source_path': '',
                 'target_table': 'test_catalog.adls_gold.test_table',
                 'file_format': '',
                 'pipeline_config': '{"query": "SELECT * FROM test_catalog.adls_silver.test_table"}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true}'
+                'notifications': '{"on_success": true}'
             }
         ]
         
@@ -394,7 +406,7 @@ class TestUnifiedPipelineGenerator:
         result = json.loads(None) if None else {}
         assert result == {}
     
-    def test_parse_email_notifications(self):
+    def test_parse_notifications(self):
         """Test email notifications parsing"""
         test_cases = [
             ('{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}', 
@@ -413,7 +425,7 @@ class TestUnifiedPipelineGenerator:
                 result = {}
             assert result == expected
     
-    def test_parse_email_notifications_invalid_json(self):
+    def test_parse_notifications_invalid_json(self):
         """Test email notifications parsing with invalid JSON"""
         test_config = '{"invalid": json,}'  # Invalid JSON
         
@@ -435,7 +447,7 @@ class TestUnifiedPipelineGenerator:
             'notebook_path': '/Workspace/Users/test/test_notebook',
             'cluster_size': 'medium',
             'schedule': '0 0 6 * * ?',
-            'email_notifications': {'on_success': True, 'on_failure': True}
+            'notifications': {'on_success': True, 'on_failure': True}
         }
         
         # The method signature requires group_rows as second parameter
@@ -465,12 +477,16 @@ class TestUnifiedPipelineGenerator:
             {
                 'operation_type': 'manual',
                 'pipeline_group': 'test_manual_job',
+                'source_type': 'notebook',
+                'file_format': '',
                 'source_path': 'src/notebooks/manual/test_notebook.py',
                 'target_table': '',
-                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 8 * * ?',
                 'pipeline_config': '{"order": 1}',
                 'cluster_size': 'medium',
-                'notifications': '{"on_success": true, "on_failure": true}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': '',
                 'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}'
             }
         ]
@@ -512,18 +528,22 @@ class TestUnifiedPipelineGenerator:
         assert base_parameters['catalog'] == 'test_catalog'
     
     def test_manual_job_with_invalid_parameters(self):
-        """Test manual job creation with invalid JSON parameters"""
+        """Test that invalid JSON parameters are caught by validation"""
         # Create test data with invalid JSON parameters
         test_data = [
             {
                 'operation_type': 'manual',
                 'pipeline_group': 'test_manual_job',
+                'source_type': 'notebook',
+                'file_format': '',
                 'source_path': 'src/notebooks/manual/test_notebook.py',
                 'target_table': '',
-                'file_format': '',
+                'trigger_type': 'time',
+                'schedule': '0 0 8 * * ?',
                 'pipeline_config': '{"order": 1}',
                 'cluster_size': 'medium',
-                'notifications': '{"on_success": true, "on_failure": true}',
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': '',
                 'parameters': '{"invalid": json}'  # Invalid JSON
             }
         ]
@@ -534,37 +554,27 @@ class TestUnifiedPipelineGenerator:
         generator = UnifiedPipelineGenerator(self.mock_bundle)
         generator.config_file = self.test_config_file
         
-        df = generator.load_config()
-        group_rows = df.to_dict('records')
-        
-        # Should not raise exception, but should log warning
-        job = generator.create_manual_job('test_manual_job', group_rows)
-        
-        # Verify job was created with only framework parameters
-        assert job is not None
-        task = job.tasks[0]
-        base_parameters = task.notebook_task.base_parameters
-        
-        # Should only have framework parameters
-        assert 'pipeline_group' in base_parameters
-        assert 'operation_type' in base_parameters
-        assert 'batch_size' not in base_parameters  # Invalid parameter not added
+        # Should raise validation error due to invalid JSON parameters
+        with pytest.raises(ValueError, match="Invalid JSON in parameters"):
+            generator.load_config()
     
     def test_load_resources_integration(self):
         """Test the main load_resources function integration"""
         test_data = [
             {
-                'pipeline_type': 'bronze',
+                'operation_type': 'bronze',
                 'pipeline_group': 'test_pipeline',
                 'source_type': 'file',
+                'file_format': 'csv',
                 'source_path': '/Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/test',
                 'target_table': '${var.catalog_name}.adls_bronze.test_table',
-                'file_format': 'csv',
                 'trigger_type': 'time',
                 'schedule': '0 0 6 * * ?',
                 'pipeline_config': '{"schema": {"type": "struct", "fields": [{"name": "id", "type": "string", "nullable": false}]}}',
                 'cluster_size': 'medium',
-                'email_notifications': '{"on_success": true, "on_failure": true}'
+                'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
+                'custom_expr': '',
+                'parameters': '{}'
             }
         ]
         

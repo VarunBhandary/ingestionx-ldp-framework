@@ -14,6 +14,7 @@ dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
     "flake8>=6.0.0",
+    "pyspark>=3.0.0",
 ]
 
 [build-system]
@@ -31,3 +32,11 @@ python_functions = ["test_*"]
 norecursedirs = ["src/notebooks"]
 
 [tool.uv] 
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "flake8>=7.3.0",
+    "pyspark>=4.0.1",
+    "pytest>=8.4.1",
+]

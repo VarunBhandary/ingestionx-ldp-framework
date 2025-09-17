@@ -27,7 +27,7 @@ class ConfigParser:
         
         required_columns = [
             'operation_type', 'pipeline_group', 'source_type', 'source_path', 'target_table', 'file_format',
-            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'cluster_config', 'notifications', 'custom_expr', 'parameters'
+            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'notifications', 'custom_expr', 'parameters'
         ]
         
         # Check required columns
@@ -47,7 +47,10 @@ class ConfigParser:
         # For manual operations, file_format can be empty
         manual_mask = df['operation_type'] == 'manual'
         non_manual_df = df[~manual_mask]
-        invalid_formats = non_manual_df[~non_manual_df['file_format'].isin(valid_formats)]['file_format'].unique()
+        
+        # Handle NaN values by filling with empty string
+        file_format_series = non_manual_df['file_format'].fillna('')
+        invalid_formats = file_format_series[~file_format_series.isin(valid_formats)].unique()
         if len(invalid_formats) > 0:
             errors.append(f"Invalid file formats: {invalid_formats}. Valid formats: {valid_formats}")
         
@@ -74,7 +77,11 @@ class ConfigParser:
             source_type = row['source_type']
             source_path = row['source_path']
             cluster_size = row.get('cluster_size', 'medium')
-            cluster_config = row.get('cluster_config', '{}')
+            cluster_config = row.get('cluster_config', '{}') if 'cluster_config' in df.columns else '{}'
+            
+            # Skip validation if source_path is NaN (for silver operations)
+            if pd.isna(source_path):
+                continue
             
             # Validate source path based on type
             if source_type == 'file':
