@@ -374,8 +374,7 @@ def generate_combined_notebook(pipeline_group, bronze_operations, silver_operati
 # COMMAND ----------
 
 import dlt
-from pyspark.sql.functions import *{'''
-from pyspark.sql.types import *''' if has_schema else ''}
+from pyspark.sql.functions import *{'''from pyspark.sql.types import *''' if has_schema else ''}
 
 # COMMAND ----------
 
