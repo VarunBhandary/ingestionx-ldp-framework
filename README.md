@@ -469,8 +469,9 @@ uv run python src/utils/validate_config.py --summary
 4. **Set** schedules and notifications
 
 ### **3. Notebooks**
-- **DLT pipelines**: Framework generates automatically
+- **DLT pipelines**: Framework generates automatically during bundle operations
 - **Manual jobs**: Create notebooks in `src/notebooks/manual/`
+- **Note**: DLT notebooks are auto-generated when you run `databricks bundle validate` or `databricks bundle deploy`
 
 ### **4. Deployment**
 ```bash
@@ -482,6 +483,16 @@ databricks bundle deploy --profile dev
 
 # Run jobs manually
 databricks bundle run <job_name> --profile dev
+```
+
+### **5. Manual Notebook Generation (Optional)**
+If you need to generate notebooks independently (e.g., for development or testing):
+```bash
+# Generate notebooks manually
+uv run python resources/notebook_generator.py
+
+# This will create notebooks in src/notebooks/generated/
+# Note: This is usually not needed as notebooks are auto-generated during bundle operations
 ```
 
 ## 🎮 **Running the Auto Loader Demo**
@@ -985,6 +996,14 @@ This framework uses DAB to automatically generate and deploy your pipelines base
 A: 
 - **DLT Pipelines**: Auto-generated Delta Live Tables pipelines for bronze/silver operations with Auto Loader integration
 - **Manual Jobs**: Custom notebook-based jobs where you write the code yourself, with full control and parameter passing
+
+#### **Q: Do I need to manually generate notebooks?**
+A: **No!** DLT notebooks are generated automatically when you run:
+- `databricks bundle validate --profile dev`
+- `databricks bundle deploy --profile dev`
+- `databricks bundle run --profile dev`
+
+The framework generates notebooks using your bundle variables, so they're always up-to-date with your configuration. You can still run `uv run python resources/notebook_generator.py` manually if needed for development or testing.
 
 ### **Configuration**
 

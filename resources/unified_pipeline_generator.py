@@ -23,6 +23,8 @@ class UnifiedPipelineGenerator:
 
     def load_config(self) -> pd.DataFrame:
         """Load configuration from unified TSV file and resolve variables."""
+        import sys
+        
         if not os.path.exists(self.config_file):
             raise FileNotFoundError(f"Configuration file {self.config_file} not found")
 
@@ -782,7 +784,7 @@ class UnifiedPipelineGenerator:
         from notebook_generator import generate_pipeline_group_notebook, resolve_variables_in_config
         import pandas as pd
         
-        print("Generating notebooks with bundle variables...")
+        print("[INFO] Generating notebooks with bundle variables...", file=sys.stderr)
         
         # Load configuration
         df = self.load_config()
@@ -794,7 +796,7 @@ class UnifiedPipelineGenerator:
             "volume_name": self.bundle.variables["volume_name"]
         }
         
-        print(f"  Using bundle variables: {bundle_variables}")
+        print(f"[INFO] Using bundle variables: {bundle_variables}", file=sys.stderr)
         
         # Group by pipeline_group
         pipeline_groups = df.groupby('pipeline_group')
@@ -805,12 +807,12 @@ class UnifiedPipelineGenerator:
         
         # Generate notebooks for each pipeline group
         for group_name, group_df in pipeline_groups:
-            print(f"  Generating notebook for pipeline group: {group_name}")
+            print(f"  Generating notebook for pipeline group: {group_name}", file=sys.stderr)
             
             # Check if this is a manual-only group - skip DLT notebook generation
             operation_types = group_df['operation_type'].unique()
             if all(op_type == 'manual' for op_type in operation_types):
-                print(f"    Skipping DLT notebook generation for manual-only group: {group_name}")
+                print(f"    Skipping DLT notebook generation for manual-only group: {group_name}", file=sys.stderr)
                 continue
             
             # Convert group_df to operations_config format
@@ -888,12 +890,12 @@ class UnifiedPipelineGenerator:
             # Generate notebooks for this group using the notebook generator
             try:
                 generate_pipeline_group_notebook(group_name, operations_config, output_dir, bundle_variables)
-                print(f"    Generated notebook: unified_{group_name}.py")
+                print(f"    Generated notebook: unified_{group_name}.py", file=sys.stderr)
             except Exception as e:
-                print(f"    Error generating notebook for {group_name}: {e}")
+                print(f"    Error generating notebook for {group_name}: {e}", file=sys.stderr)
                 continue
         
-        print(f"  Notebook generation completed. Output directory: {output_dir}")
+        print(f"[SUCCESS] Notebook generation completed. Output directory: {output_dir}", file=sys.stderr)
 
 
 def load_resources(bundle: Bundle) -> Resources:
@@ -909,7 +911,6 @@ def load_resources(bundle: Bundle) -> Resources:
     generator = UnifiedPipelineGenerator(bundle)
     
     # Generate notebooks first using bundle variables
-    print("Generating notebooks with bundle variables...")
     generator.generate_notebooks()
     
     # Then generate pipelines and jobs

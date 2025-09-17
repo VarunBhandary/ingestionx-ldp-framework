@@ -110,14 +110,27 @@ class TestIntegration:
         # Test notebook generation
         with patch('notebook_generator.os.path.exists', return_value=True):
             with patch('notebook_generator.pd.read_csv') as mock_read_csv:
-                mock_read_csv.return_value = df
-                
-                # Mock the file writing
-                with patch('builtins.open', mock_open()) as mock_file:
-                    generate_notebooks()
-                    
-                    # Verify that notebooks were generated
-                    assert mock_file.called
+                with patch('yaml.safe_load') as mock_yaml:
+                    with patch('builtins.open', MagicMock()) as mock_file:
+                        # Mock the yaml config
+                        mock_yaml.return_value = {
+                            'targets': {
+                                'dev': {
+                                    'variables': {
+                                        'catalog_name': 'test_catalog',
+                                        'schema_name': 'test_schema',
+                                        'volume_name': 'test_volume'
+                                    }
+                                }
+                            }
+                        }
+                        
+                        mock_read_csv.return_value = df
+                        
+                        generate_notebooks()
+                        
+                        # Verify that notebooks were generated
+                        assert mock_file.called
     
     def test_configuration_validation_integration(self):
         """Test configuration validation across components"""
@@ -457,11 +470,6 @@ class TestIntegration:
         assert 'header' in bronze_config
         assert 'notebook_path' in manual_config
         assert 'order' in manual_config
-
-
-def mock_open():
-    """Mock open function for file operations"""
-    return MagicMock()
 
 
 if __name__ == "__main__":

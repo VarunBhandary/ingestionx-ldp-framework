@@ -63,18 +63,12 @@ stages:
       displayName: 'Run Tests'
       continueOnError: false
     
-    - script: |
-        cd $(working.directory)
-        echo "Running integration tests..."
-        uv run python run_tests.py --verbose
-      displayName: 'Run Integration Tests'
-      continueOnError: false
     
     - script: |
         cd $(working.directory)
-        echo "Testing notebook generation..."
+        echo "Testing manual notebook generation..."
         uv run python resources/notebook_generator.py
-      displayName: 'Test Notebook Generation'
+      displayName: 'Test Manual Notebook Generation'
       continueOnError: false
     
     - script: |

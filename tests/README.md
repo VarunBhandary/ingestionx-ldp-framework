@@ -10,7 +10,7 @@ The test suite validates the entire autoloader framework including:
 - **Configuration Management**: TSV configuration loading, validation, and error handling
 - **Schema Conversion**: JSON schema to PySpark StructType conversion
 - **Pipeline Generation**: DLT pipeline and job creation with variable resolution
-- **Notebook Generation**: Static notebook generation with proper formatting
+- **Notebook Generation**: Static notebook generation with proper formatting (auto-generated during bundle operations)
 - **Data Generation**: Demo data generation with validation
 - **Integration Testing**: End-to-end workflow validation
 
@@ -116,22 +116,22 @@ Comprehensive test case database:
 
 ### Quick Test Run
 ```bash
-python run_tests.py
-```
-
-### Verbose Output
-```bash
-python run_tests.py --verbose
+uv run pytest tests/ -v
 ```
 
 ### With Coverage Report
 ```bash
-python run_tests.py --coverage
+uv run pytest tests/ --cov=resources --cov=src --cov-report=html --cov-report=term
 ```
 
-### Direct pytest
+### Run Specific Test File
 ```bash
-python -m pytest tests/ -v
+uv run pytest tests/test_config_parser.py -v
+```
+
+### Run All Tests
+```bash
+uv run pytest tests/ -v
 ```
 
 ## Test Categories
