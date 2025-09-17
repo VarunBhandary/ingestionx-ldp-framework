@@ -205,7 +205,7 @@ The framework supports **custom expressions** via the `custom_expr` column for b
 
 **Example**:
 ```tsv
-bronze	product_catalog_cdc_pipeline	file	csv	/Volumes/.../product_catalog_cdc	vbdemos.adls_bronze.product_catalog_cdc	time	0 0 6 * * ?	{"schema": {...}}	medium	{"on_success": true}	"CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation, COALESCE(updated_at, created_at) as sequence_ts, current_timestamp() as _ingestion_timestamp"
+bronze	product_catalog_cdc_pipeline	file	csv	/Volumes/.../product_catalog_cdc	vbdemos.adls_bronze.product_catalog_cdc	time	0 0 6 * * ?	{"schema": {...}}	medium	{"on_success": true}	"CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation, COALESCE(updated_at, created_at) as sequence_ts, current_timestamp() as _ingestion_timestamp"	{}
 ```
 
 #### **Silver Layer Custom Expressions**
@@ -215,24 +215,24 @@ bronze	product_catalog_cdc_pipeline	file	csv	/Volumes/.../product_catalog_cdc	vb
 
 **Example**:
 ```tsv
-silver	product_catalog_cdc_pipeline	table		vbdemos.adls_bronze.product_catalog_cdc	vbdemos.adls_silver.product_catalog_cdc_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}	medium	{"on_success": true}	"product_id, product_name as product_title, category as product_category, price as unit_price, description as product_description, status as product_status, created_at as effective_start_date, updated_at as last_modified_date, deleted_at as soft_delete_date, cdc_operation, sequence_ts"
+silver	product_catalog_cdc_pipeline	table		vbdemos.adls_bronze.product_catalog_cdc	vbdemos.adls_silver.product_catalog_cdc_scd2	time	0 0 6 * * ?	{"keys": ["product_id"], "stored_as_scd_type": "2", "sequence_by": "sequence_ts"}	medium	{"on_success": true}	"product_id, product_name as product_title, category as product_category, price as unit_price, description as product_description, status as product_status, created_at as effective_start_date, updated_at as last_modified_date, deleted_at as soft_delete_date, cdc_operation, sequence_ts"	{}
 ```
 
 ### **Operation Types**
 
 #### **Bronze Operations**
 ```tsv
-bronze	customer_pipeline	file	csv	abfss://path/to/source	vbdemos.adls_bronze.customers	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "...", "cloudFiles.checkpointLocation": "..."}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+bronze	customer_pipeline	file	csv	abfss://path/to/source	vbdemos.adls_bronze.customers	time	0 0 6 * * ?	{"cloudFiles.schemaLocation": "...", "cloudFiles.checkpointLocation": "..."}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 ```
 
 #### **Silver Operations**
 ```tsv
-silver	customer_pipeline	table		vbdemos.adls_bronze.customers	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["name", "email"], "stored_as_scd_type": "2"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+silver	customer_pipeline	table		vbdemos.adls_bronze.customers	vbdemos.adls_silver.customers_scd2	time	0 0 6 * * ?	{"keys": ["customer_id"], "track_history_except_column_list": ["name", "email"], "stored_as_scd_type": "2"}	medium	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 ```
 
 #### **Gold Operations**
 ```tsv
-gold	customer_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdemos.adls_gold.customer_analytics	time	0 0 6 * * ?	{"notebook_path": "src/notebooks/generated/gold_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+gold	customer_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdemos.adls_gold.customer_analytics	time	0 0 6 * * ?	{"notebook_path": "src/notebooks/generated/gold_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 ```
 
 #### **Manual Operations**
@@ -267,13 +267,13 @@ manual	my_pipeline	notebook		src/notebooks/manual/my_step2.py	output_table2	time
 ### **1. DLT Pipeline (Bronze + Silver + Gold)**
 ```tsv
 # Bronze: File ingestion
-bronze	product_pipeline	file	csv	abfss://path/to/products	vbdemos.adls_bronze.products	time	0 0 */20 * * ?	{"cloudFiles.schemaLocation": "...", "cloudFiles.checkpointLocation": "..."}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+bronze	product_pipeline	file	csv	abfss://path/to/products	vbdemos.adls_bronze.products	time	0 0 */20 * * ?	{"cloudFiles.schemaLocation": "...", "cloudFiles.checkpointLocation": "..."}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 
 # Silver: SCD Type 2 transformation
-silver	product_pipeline	table		vbdemos.adls_bronze.products	vbdemos.adls_silver.products_scd2	time	0 0 */20 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["name", "price"], "stored_as_scd_type": "2"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+silver	product_pipeline	table		vbdemos.adls_bronze.products	vbdemos.adls_silver.products_scd2	time	0 0 */20 * * ?	{"keys": ["product_id"], "track_history_except_column_list": ["name", "price"], "stored_as_scd_type": "2"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 
 # Gold: Analytics
-gold	product_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdemos.adls_gold.product_analytics	time	0 0 */20 * * ?	{"notebook_path": "src/notebooks/generated/gold_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}
+gold	product_pipeline	notebook		src/notebooks/generated/gold_analytics.py	vbdemos.adls_gold.product_analytics	time	0 0 */20 * * ?	{"notebook_path": "src/notebooks/generated/gold_analytics.py"}	serverless	{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}		{}
 ```
 
 ### **2. Manual Pipeline (Custom Notebooks with Parameters)**
