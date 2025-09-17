@@ -61,7 +61,9 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true',
+                'include_file_metadata': 'true'
             }
         ]
     
@@ -130,7 +132,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -159,7 +162,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -188,7 +192,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -217,7 +222,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -246,7 +252,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -275,7 +282,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -304,7 +312,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true}',  # Missing recipients
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -334,6 +343,7 @@ class TestConfigParser:
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
                 'custom_expr': '',
                 'parameters': '{}',
+                'include_file_metadata': 'true',
                 'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}'
             }
         ]
@@ -363,6 +373,7 @@ class TestConfigParser:
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
                 'custom_expr': '',
                 'parameters': '{}',
+                'include_file_metadata': 'true',
                 'parameters': '{"invalid": json}'  # Invalid JSON
             }
         ]
@@ -393,6 +404,7 @@ class TestConfigParser:
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
                 'custom_expr': '',
                 'parameters': '{}',
+                'include_file_metadata': 'true',
                 'parameters': '{"batch_size": 1000}'  # Should not be allowed for bronze
             }
         ]
@@ -423,6 +435,7 @@ class TestConfigParser:
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com"]}',
                 'custom_expr': '',
                 'parameters': '{}',
+                'include_file_metadata': 'true',
                 'parameters': '{"invalid_param": [1, 2, 3]}'  # List not allowed
             }
         ]
@@ -452,7 +465,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["invalid-email"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -488,7 +502,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -517,7 +532,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -546,7 +562,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -578,7 +595,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -617,7 +635,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -648,7 +667,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -679,7 +699,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -713,7 +734,8 @@ class TestConfigParser:
                     'cluster_config': cluster_config,
                     'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                     'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
                 }
             ]
             
@@ -741,7 +763,8 @@ class TestConfigParser:
                 'cluster_config': '{}',
                 'notifications': '{"on_success": true, "on_failure": true}',  # Missing recipients
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         

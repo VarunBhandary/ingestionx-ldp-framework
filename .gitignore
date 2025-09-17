@@ -33,6 +33,8 @@ venv.bak/
 # IDE
 .vscode/
 .idea/
+.cursor/
+AGENTS.md
 *.swp
 *.swo
 *~

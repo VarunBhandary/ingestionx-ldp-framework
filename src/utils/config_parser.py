@@ -27,7 +27,7 @@ class ConfigParser:
         
         required_columns = [
             'operation_type', 'pipeline_group', 'source_type', 'source_path', 'target_table', 'file_format',
-            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'notifications', 'custom_expr', 'parameters'
+            'trigger_type', 'schedule', 'pipeline_config', 'cluster_size', 'notifications', 'custom_expr', 'parameters', 'include_file_metadata'
         ]
         
         # Check required columns
@@ -71,6 +71,15 @@ class ConfigParser:
         invalid_cluster_sizes = df[~df['cluster_size'].isin(valid_cluster_sizes)]['cluster_size'].unique()
         if len(invalid_cluster_sizes) > 0:
             errors.append(f"Invalid cluster sizes: {invalid_cluster_sizes}. Valid sizes: {valid_cluster_sizes}")
+        
+        # Validate include_file_metadata (should be boolean-like)
+        if 'include_file_metadata' in df.columns:
+            # Convert to string and check for valid boolean values
+            metadata_series = df['include_file_metadata'].astype(str).str.lower()
+            valid_metadata_values = ['true', 'false', '1', '0', 'yes', 'no']
+            invalid_metadata = metadata_series[~metadata_series.isin(valid_metadata_values)].unique()
+            if len(invalid_metadata) > 0:
+                errors.append(f"Invalid include_file_metadata values: {invalid_metadata}. Valid values: {valid_metadata_values}")
         
         # Validate paths and autoloader options
         for idx, row in df.iterrows():

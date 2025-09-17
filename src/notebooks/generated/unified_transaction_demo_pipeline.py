@@ -43,7 +43,7 @@ def transactions_demo():
             .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions")
-            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

@@ -74,7 +74,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             },
             {
                 'operation_type': 'silver',
@@ -89,7 +90,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -134,7 +136,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -154,6 +157,8 @@ class TestIntegration:
             df['custom_expr'] = ''
         if 'parameters' not in df.columns:
             df['parameters'] = '{}'
+        if 'include_file_metadata' not in df.columns:
+            df['include_file_metadata'] = 'true'
         
         errors = parser.validate_config(df)
         assert len(errors) == 0
@@ -221,7 +226,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"recipients": ["admin@${var.catalog_name}.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -295,7 +301,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             },
             {
                 'operation_type': 'silver',
@@ -310,7 +317,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@company.com", "data-team@company.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -357,7 +365,8 @@ class TestIntegration:
                 'cluster_size': 'small',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["data-quality@company.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -400,7 +409,8 @@ class TestIntegration:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             },
             {
                 'operation_type': 'manual',
@@ -415,7 +425,8 @@ class TestIntegration:
                 'cluster_size': 'small',
                 'notifications': '{"on_success": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': ' ',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         

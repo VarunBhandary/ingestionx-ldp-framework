@@ -86,6 +86,12 @@ schema = {spark_schema_str}'''
         schema_application = '''
             .schema(schema)  # Apply fixed schema for data validation'''
     
+    # Check if file metadata should be included
+    include_file_metadata = op_config.get("include_file_metadata", False)
+    # Convert string values to boolean
+    if isinstance(include_file_metadata, str):
+        include_file_metadata = include_file_metadata.lower() in ['true', '1', 'yes']
+    
     # Handle custom expressions
     custom_expr = op_config.get("custom_expr", "")
     if custom_expr:
@@ -97,15 +103,36 @@ schema = {spark_schema_str}'''
             remaining_expr = custom_expr.strip()[1:].strip()
             if remaining_expr.startswith(','):
                 remaining_expr = remaining_expr[1:].strip()
+            
+            # Add file metadata if enabled
+            if include_file_metadata:
+                # Check if _metadata is already in the expression to avoid conflicts
+                if '_metadata' not in remaining_expr:
+                    remaining_expr = f'_metadata as source_metadata, {remaining_expr}'
+                else:
+                    # If _metadata exists, rename it to source_metadata to avoid conflicts
+                    remaining_expr = remaining_expr.replace('_metadata', 'source_metadata')
+            
             # Pass * and the remaining expression as separate arguments
             select_expr = f'"*", "{remaining_expr}"'
         else:
             # Use selectExpr() for expressions without *
             select_method = "selectExpr"
-            select_expr = f'"{custom_expr}"'
+            
+            # Add file metadata if enabled and not already present
+            if include_file_metadata and '_metadata' not in custom_expr:
+                select_expr = f'"{custom_expr}", "_metadata as source_metadata"'
+            elif include_file_metadata and '_metadata' in custom_expr:
+                # Replace _metadata with source_metadata to avoid conflicts
+                select_expr = f'"{custom_expr.replace("_metadata", "source_metadata")}"'
+            else:
+                select_expr = f'"{custom_expr}"'
     else:
         select_method = "selectExpr"
-        select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
+        if include_file_metadata:
+            select_expr = '"*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"'
+        else:
+            select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
 
     # Generate the notebook content
     notebook_content = f'''# Databricks notebook source
@@ -413,6 +440,12 @@ schema = {spark_schema_str}'''
             schema_application = '''
             .schema(schema)  # Apply fixed schema for data validation'''
         
+        # Check if file metadata should be included
+        include_file_metadata = op_config.get("include_file_metadata", False)
+        # Convert string values to boolean
+        if isinstance(include_file_metadata, str):
+            include_file_metadata = include_file_metadata.lower() in ['true', '1', 'yes']
+        
         # Handle custom expressions
         custom_expr = op_config.get("custom_expr", "")
         # Handle NaN values from pandas
@@ -429,6 +462,15 @@ schema = {spark_schema_str}'''
                 if remaining_expr.startswith(','):
                     remaining_expr = remaining_expr[1:].strip()
                 
+                # Add file metadata if enabled
+                if include_file_metadata:
+                    # Check if _metadata is already in the expression to avoid conflicts
+                    if '_metadata' not in remaining_expr:
+                        remaining_expr = f'_metadata as source_metadata, {remaining_expr}'
+                    else:
+                        # If _metadata exists, rename it to source_metadata to avoid conflicts
+                        remaining_expr = remaining_expr.replace('_metadata', 'source_metadata')
+                
                 # Split the remaining expression by commas, but be careful with function calls and string literals
                 expressions = _parse_expressions_smart(remaining_expr)
                 
@@ -436,12 +478,23 @@ schema = {spark_schema_str}'''
             else:
                 # Use selectExpr() for expressions without *
                 select_method = "selectExpr"
+                
+                # Add file metadata if enabled and not already present
+                if include_file_metadata and '_metadata' not in custom_expr:
+                    custom_expr = f'{custom_expr}, _metadata as source_metadata'
+                elif include_file_metadata and '_metadata' in custom_expr:
+                    # Replace _metadata with source_metadata to avoid conflicts
+                    custom_expr = custom_expr.replace('_metadata', 'source_metadata')
+                
                 # Split the expression by commas and format as separate arguments
                 expressions = _parse_expressions_smart(custom_expr)
                 select_expr = ', '.join([f'"{expr}"' for expr in expressions])
         else:
             select_method = "selectExpr"
-            select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
+            if include_file_metadata:
+                select_expr = '"*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"'
+            else:
+                select_expr = '"*", "current_timestamp() as _ingestion_timestamp"'
         
         notebook_content += f'''
 
@@ -726,6 +779,10 @@ def main():
                 # Add custom_expr if present
                 if pd.notna(row.get('custom_expr', '')) and row['custom_expr']:
                     operations_config[op_name]['custom_expr'] = row['custom_expr']
+                
+                # Add include_file_metadata if present
+                if pd.notna(row.get('include_file_metadata', '')) and row['include_file_metadata']:
+                    operations_config[op_name]['include_file_metadata'] = row['include_file_metadata']
                 
                 # Add all autoloader options from the pipeline_config
                 for key, value in pipeline_config.items():

@@ -46,7 +46,7 @@ def customers_demo():
             .option("cloudFiles.format", "csv")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customers")
-            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------
@@ -77,7 +77,7 @@ def customer_preferences_demo():
             .option("cloudFiles.format", "json")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/customer_preferences")
-            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

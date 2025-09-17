@@ -46,7 +46,7 @@ def product_catalog_cdc():
             .option("cloudFiles.format", "csv")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/product_catalog_cdc")
-            .selectExpr("*", "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation", "COALESCE(updated_at, created_at) as sequence_ts", "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "_metadata as source_metadata", "CASE WHEN deleted_at IS NOT NULL THEN 'DELETE' WHEN created_at = updated_at THEN 'INSERT' ELSE 'UPDATE' END as cdc_operation", "COALESCE(updated_at, created_at) as sequence_ts", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

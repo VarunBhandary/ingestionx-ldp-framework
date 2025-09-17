@@ -48,7 +48,7 @@ def inventory_demo():
             .option("cloudFiles.format", "csv")
             .schema(schema)  # Apply fixed schema for data validation
             .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/inventory")
-            .selectExpr("*", "current_timestamp() as _ingestion_timestamp"))
+            .selectExpr("*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"))
 
 
 # COMMAND ----------

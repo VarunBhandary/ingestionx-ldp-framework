@@ -79,7 +79,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -184,7 +185,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             },
             {
                 'operation_type': 'silver',
@@ -199,7 +201,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
@@ -487,7 +490,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}'
+                'parameters': '{"batch_size": 1000, "debug_mode": true, "catalog": "test_catalog"}',
+                'include_file_metadata': 'false'
             }
         ]
         
@@ -544,7 +548,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{"invalid": json}'  # Invalid JSON
+                'parameters': '{"invalid": json}',  # Invalid JSON
+                'include_file_metadata': 'false'
             }
         ]
         
@@ -574,7 +579,8 @@ class TestUnifiedPipelineGenerator:
                 'cluster_size': 'medium',
                 'notifications': '{"on_success": true, "on_failure": true, "recipients": ["admin@test.com"]}',
                 'custom_expr': '',
-                'parameters': '{}'
+                'parameters': '{}',
+                'include_file_metadata': 'true'
             }
         ]
         
