@@ -1,0 +1,95 @@
+# Minimal Azure DevOps Pipeline for Autoloader Framework
+# This pipeline runs essential tests for every merge request
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+      - bugfix/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  python.version: '3.11'
+  working.directory: '$(System.DefaultWorkingDirectory)'
+
+stages:
+- stage: Test
+  displayName: 'Test and Validate'
+  jobs:
+  - job: TestJob
+    displayName: 'Run Tests and Validation'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      fetchDepth: 0
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set Python Version'
+      inputs:
+        versionSpec: '$(python.version)'
+        addToPath: true
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install uv
+      displayName: 'Install uv package manager'
+    
+    - script: |
+        cd $(working.directory)
+        uv --version
+        uv sync --group dev
+      displayName: 'Install Dependencies with uv'
+    
+    - script: |
+        cd $(working.directory)
+        echo "Running configuration validation..."
+        uv run python src/utils/validate_config.py --config-file config/unified_pipeline_config.tsv
+      displayName: 'Validate Configuration'
+      continueOnError: false
+    
+    - script: |
+        cd $(working.directory)
+        echo "Running test suite..."
+        uv run pytest tests/ -v --tb=short
+      displayName: 'Run Tests'
+      continueOnError: false
+    
+    - script: |
+        cd $(working.directory)
+        echo "Running integration tests..."
+        uv run python run_tests.py --verbose
+      displayName: 'Run Integration Tests'
+      continueOnError: false
+    
+    - script: |
+        cd $(working.directory)
+        echo "Testing notebook generation..."
+        uv run python resources/notebook_generator.py
+      displayName: 'Test Notebook Generation'
+      continueOnError: false
+    
+    - script: |
+        cd $(working.directory)
+        echo "Testing bundle validation..."
+        # Test bundle validation with different targets
+        uv run databricks bundle validate --target dev --profile dev
+      displayName: 'Test Bundle Validation'
+      continueOnError: false
+      env:
+        DATABRICKS_CONFIG_PROFILE: dev
+    
+    - script: |
+        cd $(working.directory)
+        echo "Running final validation..."
+        uv run python src/utils/validate_config.py --config-file config/unified_pipeline_config.tsv --summary
+      displayName: 'Final Configuration Validation'
+      continueOnError: false

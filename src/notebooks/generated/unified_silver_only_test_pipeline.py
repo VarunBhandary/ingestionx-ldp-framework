@@ -26,19 +26,19 @@ from pyspark.sql.functions import *
 # COMMAND ----------
 
 # Create the target streaming table
-dlt.create_streaming_table("my_test_catalog.adls_silver.customers_demo_silver_only_scd2")
+dlt.create_streaming_table("vbdemos.adls_silver.customers_demo_silver_only_scd2")
 
 # COMMAND ----------
 
 @dlt.view
 def bronze_customers_demo_silver_only_scd2_source():
-    return spark.readStream.table("my_test_catalog.adls_bronze.customers_demo")
+    return spark.readStream.table("vbdemos.adls_bronze.customers_demo")
 
 # COMMAND ----------
 
 # Create Auto CDC flow for SCD Type 2
 dlt.create_auto_cdc_flow(
-    target="my_test_catalog.adls_silver.customers_demo_silver_only_scd2",
+    target="vbdemos.adls_silver.customers_demo_silver_only_scd2",
     source="bronze_customers_demo_silver_only_scd2_source",
     **{"keys": ["customer_id"], "track_history_except_column_list": ["created_at", "is_active"], "stored_as_scd_type": "2", "sequence_by": "updated_at"}
 )

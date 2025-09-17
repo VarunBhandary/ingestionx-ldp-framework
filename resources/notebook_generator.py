@@ -79,6 +79,8 @@ schema = {spark_schema_str}'''
         option_lines.append(f'            .option("{key}", "{value}")')
     
     options_code = '\n'.join(option_lines) if option_lines else ''
+    if options_code:
+        options_code = '\n' + options_code
     
     # Generate schema application code
     schema_application = ""
@@ -162,8 +164,8 @@ from pyspark.sql.functions import *{schema_code}
 def {table_name}():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
-            .format("cloudFiles"){f'''
-{options_code}''' if options_code else ''}
+            .format("cloudFiles")
+{options_code if options_code else ''}
             .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
             .{select_method}({select_expr}))
@@ -514,8 +516,8 @@ schema = {spark_schema_str}'''
 def {table_name}():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
-            .format("cloudFiles"){f'''
-{options_code}''' if options_code else ''}
+            .format("cloudFiles")
+{options_code if options_code else ''}
             .option("cloudFiles.format", "{file_format}"){schema_application}
             .load("{source_path}")
             .{select_method}({select_expr}))
@@ -742,12 +744,39 @@ def main():
     # Load configuration
     df = pd.read_csv(config_file, sep='\t')
     
-    # Get bundle variables from environment or use defaults
-    bundle_variables = {
-        "catalog_name": os.environ.get("CATALOG_NAME", "vbdemos"),
-        "schema_name": os.environ.get("SCHEMA_NAME", "dbdemos_autoloader"),
-        "volume_name": os.environ.get("VOLUME_NAME", "raw_data")
-    }
+    # Try to get bundle variables from databricks.yml, fallback to environment or defaults
+    bundle_variables = None
+    try:
+        import yaml
+        with open("databricks.yml", "r") as f:
+            bundle_config = yaml.safe_load(f)
+        
+        # Get the current target (default to dev)
+        current_target = os.environ.get("DATABRICKS_BUNDLE_TARGET", "dev")
+        
+        # Get variables for the current target
+        if "targets" in bundle_config and current_target in bundle_config["targets"]:
+            target_vars = bundle_config["targets"][current_target].get("variables", {})
+            bundle_variables = {
+                "catalog_name": target_vars.get("catalog_name", "vbdemos"),
+                "schema_name": target_vars.get("schema_name", "dbdemos_autoloader"),
+                "volume_name": target_vars.get("volume_name", "raw_data")
+            }
+            print(f"Using bundle variables from databricks.yml (target: {current_target})")
+        else:
+            print(f"Target '{current_target}' not found in databricks.yml, using defaults")
+            bundle_variables = None
+    except Exception as e:
+        print(f"Could not read databricks.yml: {e}, using environment variables or defaults")
+        bundle_variables = None
+    
+    # Fallback to environment variables or defaults
+    if bundle_variables is None:
+        bundle_variables = {
+            "catalog_name": os.environ.get("CATALOG_NAME", "vbdemos"),
+            "schema_name": os.environ.get("SCHEMA_NAME", "dbdemos_autoloader"),
+            "volume_name": os.environ.get("VOLUME_NAME", "raw_data")
+        }
     
     # Resolve variables in the configuration
     df = resolve_variables_in_config(df, bundle_variables)
