@@ -21,6 +21,15 @@ from typing import List, Optional
 # Add src to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Handle Windows encoding issues
+def safe_print(message: str) -> None:
+    """Print message with proper encoding handling for Windows compatibility."""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        # Fallback to ASCII-safe printing
+        print(message.encode('ascii', 'replace').decode('ascii'))
+
 from utils.config_parser import ConfigParser
 from utils.schema_converter import validate_schema_definition
 import pandas as pd
@@ -38,8 +47,8 @@ class ConfigValidator:
         """Perform comprehensive validation and return (is_valid, errors)."""
         errors = []
         
-        print(f"🔍 Validating configuration: {self.config_file}")
-        print("=" * 60)
+        safe_print(f"[INFO] Validating configuration: {self.config_file}")
+        safe_print("=" * 60)
         
         # Check if file exists
         if not os.path.exists(self.config_file):
@@ -84,15 +93,15 @@ class ConfigValidator:
         is_valid = len(errors) == 0
         
         if is_valid:
-            print("✅ Configuration validation passed!")
-            print(f"   - Loaded {len(df)} pipeline configurations")
-            print(f"   - All validations passed successfully")
+            safe_print("[SUCCESS] Configuration validation passed!")
+            safe_print(f"   - Loaded {len(df)} pipeline configurations")
+            safe_print(f"   - All validations passed successfully")
         else:
-            print("❌ Configuration validation failed!")
-            print(f"   - Found {len(errors)} validation errors")
-            print("\nValidation Errors:")
+            safe_print("[ERROR] Configuration validation failed!")
+            safe_print(f"   - Found {len(errors)} validation errors")
+            safe_print("\nValidation Errors:")
             for i, error in enumerate(errors, 1):
-                print(f"   {i}. {error}")
+                safe_print(f"   {i}. {error}")
         
         return is_valid, errors
     
@@ -197,7 +206,7 @@ class ConfigValidator:
     
     def print_summary(self, df: pd.DataFrame):
         """Print a summary of the configuration."""
-        print("\n📊 Configuration Summary:")
+        print("\n[SUMMARY] Configuration Summary:")
         print("-" * 30)
         
         # Count by operation type
@@ -240,7 +249,7 @@ def main():
     
     # Validate configuration file exists
     if not os.path.exists(args.config_file):
-        print(f"❌ Error: Configuration file not found: {args.config_file}")
+        print(f"[ERROR] Configuration file not found: {args.config_file}")
         sys.exit(1)
     
     # Create validator and run validation
@@ -258,10 +267,10 @@ def main():
     # Exit with appropriate code
     if is_valid:
         if not args.quiet:
-            print("\n🎉 Configuration is ready for bundle operations!")
+            print("\n[SUCCESS] Configuration is ready for bundle operations!")
         sys.exit(0)
     else:
-        print(f"\n💡 Fix the errors above and run validation again.")
+        print(f"\n[INFO] Fix the errors above and run validation again.")
         print(f"   Command: python validate_config.py --config-file {args.config_file}")
         sys.exit(1)
 

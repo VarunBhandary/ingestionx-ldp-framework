@@ -73,7 +73,7 @@ else:
     processing_time = 2.5  # Slower with sequential processing
 time.sleep(processing_time)
 
-print("✅ Parallel task processing completed successfully!")
+print("[SUCCESS] Parallel task processing completed successfully!")
 
 # COMMAND ----------
 
@@ -82,7 +82,7 @@ print("✅ Parallel task processing completed successfully!")
 
 # COMMAND ----------
 
-print("\n📊 Parallel Task Metrics:")
+print("\n[INFO] Parallel Task Metrics:")
 print("  - Records processed: 500")
 print(f"  - Processing time: {processing_time:.1f} seconds")
 print(f"  - Parallel mode: {parallel_mode}")
@@ -94,5 +94,5 @@ print("  - Parallel execution: True")
 
 # COMMAND ----------
 
-print("\n🎯 Parallel task completed!")
+print("\n[INFO] Parallel task completed!")
 print("This task ran concurrently with other order 2 tasks")

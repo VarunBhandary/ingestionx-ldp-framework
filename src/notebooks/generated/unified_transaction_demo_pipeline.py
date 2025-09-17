@@ -21,7 +21,7 @@ from pyspark.sql.functions import *
 # COMMAND ----------
 
 @dlt.table(
-    name="vbdemos.adls_bronze.transactions_demo",
+    name="my_test_catalog.adls_bronze.transactions_demo",
     table_properties={
         "quality": "bronze",
         "operation": "bronze_transactions_demo",
@@ -34,15 +34,15 @@ def transactions_demo():
     # Read from source using autoloader and add audit columns using selectExpr
     return (spark.readStream
             .format("cloudFiles")
-            .option("cloudFiles.schemaLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/schema/transactions")
-            .option("cloudFiles.checkpointLocation", "/Volumes/vbdemos/dbdemos_autoloader/raw_data/checkpoint/transactions")
+            .option("cloudFiles.schemaLocation", "/Volumes/my_test_catalog/dbdemos_autoloader/raw_data/schema/transactions")
+            .option("cloudFiles.checkpointLocation", "/Volumes/my_test_catalog/dbdemos_autoloader/raw_data/checkpoint/transactions")
             .option("cloudFiles.maxFilesPerTrigger", "50")
             .option("cloudFiles.allowOverwrites", "false")
             .option("header", "true")
             .option("inferSchema", "true")
             .option("cloudFiles.validateOptions", "false")
             .option("cloudFiles.format", "csv")
-            .load("/Volumes/vbdemos/dbdemos_autoloader/raw_data/transactions")
+            .load("/Volumes/my_test_catalog/dbdemos_autoloader/raw_data/transactions")
             .selectExpr("*", "_metadata as source_metadata", "current_timestamp() as _ingestion_timestamp"))
 
 
@@ -54,19 +54,19 @@ def transactions_demo():
 # COMMAND ----------
 
 # Create the target streaming table
-dlt.create_streaming_table("vbdemos.adls_silver.transactions_demo_scd1")
+dlt.create_streaming_table("my_test_catalog.adls_silver.transactions_demo_scd1")
 
 # COMMAND ----------
 
 @dlt.view
 def bronze_transactions_demo_scd1_source():
-    return spark.readStream.table("vbdemos.adls_bronze.transactions_demo")
+    return spark.readStream.table("my_test_catalog.adls_bronze.transactions_demo")
 
 # COMMAND ----------
 
 # Create Auto CDC flow for SCD Type 2
 dlt.create_auto_cdc_flow(
-    target="vbdemos.adls_silver.transactions_demo_scd1",
+    target="my_test_catalog.adls_silver.transactions_demo_scd1",
     source="bronze_transactions_demo_scd1_source",
     **{"keys": ["transaction_id"], "stored_as_scd_type": "1", "sequence_by": "updated_ts"}
 )

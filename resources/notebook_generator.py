@@ -275,14 +275,15 @@ from pyspark.sql.types import *
 # COMMAND ----------
 
 # Read from the silver SCD2 table (replace with your silver table name)
-silver_df = spark.read.table("vbdemos.adls_silver.products_scd2")
+# Note: Update this table reference to match your actual silver table
+silver_df = spark.read.table("${var.catalog_name}.${var.schema_name}.products_scd2")
 
 # COMMAND ----------
 
 # Debug: Show available columns in the silver table
-print("🔍 Available columns in silver table:")
+print("[DEBUG] Available columns in silver table:")
 silver_df.printSchema()
-print(f"📊 Total records in silver table: {silver_df.count()}")
+print(f"[INFO] Total records in silver table: {silver_df.count()}")
 
 # COMMAND ----------
 
@@ -310,9 +311,9 @@ analytics_df.write.mode("overwrite").saveAsTable("{target_table}")
 
 # COMMAND ----------
 
-print("✅ Gold table created successfully!")
-print(f"📊 Records processed: {{analytics_df.count()}}")
-print(f"🎯 Target table: {target_table}")
+print("[SUCCESS] Gold table created successfully!")
+print(f"[INFO] Records processed: {{analytics_df.count()}}")
+print(f"[INFO] Target table: {target_table}")
 '''
     
     # Write the notebook
@@ -321,7 +322,7 @@ print(f"🎯 Target table: {target_table}")
     
     print(f"Generated gold notebook: {notebook_path}")
 
-def generate_pipeline_group_notebook(pipeline_group, group_operations, output_dir):
+def generate_pipeline_group_notebook(pipeline_group, group_operations, output_dir, bundle_variables=None):
     """Generate a complete notebook for a pipeline group"""
     
     # Create output directory
@@ -343,13 +344,13 @@ def generate_pipeline_group_notebook(pipeline_group, group_operations, output_di
     
     # Generate only the combined notebook for the entire pipeline group
     combined_notebook_path = output_dir / f"unified_{pipeline_group}.py"
-    generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, str(combined_notebook_path))
+    generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, str(combined_notebook_path), bundle_variables)
 
-def generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, notebook_path):
+def generate_combined_notebook(pipeline_group, bronze_operations, silver_operations, gold_operations, notebook_path, bundle_variables=None):
     """Generate a combined notebook for all operations in a pipeline group"""
     
     # Debug output
-    print(f"      📝 Generating notebook for {pipeline_group}")
+    print(f"      [INFO] Generating notebook for {pipeline_group}")
     print(f"         Bronze operations: {len(bronze_operations)}")
     print(f"         Silver operations: {len(silver_operations)}")
     print(f"         Gold operations: {len(gold_operations)}")
@@ -626,15 +627,20 @@ dlt.create_auto_cdc_flow(
     
     print(f"Generated combined notebook: {notebook_path}")
 
-def resolve_variables_in_config(df: pd.DataFrame) -> pd.DataFrame:
+def resolve_variables_in_config(df: pd.DataFrame, bundle_variables: dict = None) -> pd.DataFrame:
     """Resolve bundle variables in the configuration DataFrame."""
     print("Resolving bundle variables in configuration...")
     
-    # For now, use hardcoded values that match the dev environment
-    # In a real implementation, this would read from bundle variables
-    catalog_name = "vbdemos"
-    schema_name = "dbdemos_autoloader"
-    volume_name = "raw_data"
+    # Use provided bundle variables or fallback to defaults
+    if bundle_variables:
+        catalog_name = bundle_variables.get("catalog_name", "vbdemos")
+        schema_name = bundle_variables.get("schema_name", "dbdemos_autoloader")
+        volume_name = bundle_variables.get("volume_name", "raw_data")
+    else:
+        # Fallback to hardcoded values for standalone execution
+        catalog_name = "vbdemos"
+        schema_name = "dbdemos_autoloader"
+        volume_name = "raw_data"
     
     print(f"  Using catalog: {catalog_name}")
     print(f"  Using schema: {schema_name}")
@@ -736,8 +742,15 @@ def main():
     # Load configuration
     df = pd.read_csv(config_file, sep='\t')
     
+    # Get bundle variables from environment or use defaults
+    bundle_variables = {
+        "catalog_name": os.environ.get("CATALOG_NAME", "vbdemos"),
+        "schema_name": os.environ.get("SCHEMA_NAME", "dbdemos_autoloader"),
+        "volume_name": os.environ.get("VOLUME_NAME", "raw_data")
+    }
+    
     # Resolve variables in the configuration
-    df = resolve_variables_in_config(df)
+    df = resolve_variables_in_config(df, bundle_variables)
     
     # Group by pipeline_group
     pipeline_groups = df.groupby('pipeline_group')

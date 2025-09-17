@@ -85,7 +85,7 @@ if [ "$QUIET" = true ]; then
 fi
 
 # Run validation
-echo -e "${BLUE}🔍 Validating autoloader framework configuration...${NC}"
+echo -e "${BLUE}[INFO] Validating autoloader framework configuration...${NC}"
 echo -e "${BLUE}   Config file: $CONFIG_FILE${NC}"
 echo -e "${BLUE}   Profile: $PROFILE${NC}"
 echo ""
@@ -94,7 +94,7 @@ echo ""
 if eval $CMD; then
     if [ "$QUIET" = false ]; then
         echo ""
-        echo -e "${GREEN}🎉 Configuration validation successful!${NC}"
+        echo -e "${GREEN}[SUCCESS] Configuration validation successful!${NC}"
         echo -e "${GREEN}   You can now run bundle operations:${NC}"
         echo -e "${GREEN}   - databricks bundle validate --profile $PROFILE${NC}"
         echo -e "${GREEN}   - databricks bundle deploy --profile $PROFILE${NC}"
@@ -102,8 +102,8 @@ if eval $CMD; then
     exit 0
 else
     echo ""
-    echo -e "${RED}❌ Configuration validation failed!${NC}"
-    echo -e "${YELLOW}💡 Fix the errors above and run validation again.${NC}"
+    echo -e "${RED}[ERROR] Configuration validation failed!${NC}"
+    echo -e "${YELLOW}[INFO] Fix the errors above and run validation again.${NC}"
     echo -e "${YELLOW}   Command: $0 --config-file $CONFIG_FILE${NC}"
     exit 1
 fi

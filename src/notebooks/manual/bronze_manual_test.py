@@ -53,7 +53,7 @@ print(f"Schema: {schema}")
 
 # COMMAND ----------
 
-print("\n📥 Simulating data ingestion...")
+print("\n[INFO] Simulating data ingestion...")
 print("  - Reading from source systems")
 print("  - Validating data format")
 print("  - Applying basic data quality checks")
@@ -70,7 +70,7 @@ import time
 processing_time = min(3, int(batch_size) / 1000)  # Scale processing time with batch size
 time.sleep(processing_time)
 
-print("✅ Bronze layer processing completed successfully!")
+print("[SUCCESS] Bronze layer processing completed successfully!")
 
 # COMMAND ----------
 
@@ -79,7 +79,7 @@ print("✅ Bronze layer processing completed successfully!")
 
 # COMMAND ----------
 
-print("\n📊 Data Quality Metrics:")
+print("\n[INFO] Data Quality Metrics:")
 print(f"  - Records processed: {batch_size}")
 print("  - Data quality score: 95%")
 print(f"  - Processing time: {processing_time:.1f} seconds")
@@ -90,5 +90,5 @@ if debug_mode:
 
 # COMMAND ----------
 
-print("\n🎯 Bronze layer task completed!")
+print("\n[INFO] Bronze layer task completed!")
 print(f"Next: Silver layer processing (operation {int(operation_index) + 1})")

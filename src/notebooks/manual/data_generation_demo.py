@@ -131,23 +131,23 @@ try:
     # Archive directory for inventory demo
     dbutils.fs.mkdirs(f"{VOLUME_PATH}/archive/inventory")
     
-    print(f"✅ Created directories in volume: {VOLUME_PATH}")
-    print(f"📁 Data directories:")
+    print(f"[SUCCESS] Created directories in volume: {VOLUME_PATH}")
+    print(f"[INFO] Data directories:")
     print(f"   • Customer data: {CUSTOMER_PATH}")
     print(f"   • Transaction data: {TRANSACTION_PATH}")
     print(f"   • Inventory data: {INVENTORY_PATH}")
     print(f"   • Shipment data: {SHIPMENT_PATH}")
     print(f"   • Product Catalog CDC data: {PRODUCT_CATALOG_CDC_PATH}")
-    print(f"🔄 Checkpoint directories (for Auto Loader state tracking):")
+    print(f"[INFO] Checkpoint directories (for Auto Loader state tracking):")
     print(f"   • {VOLUME_PATH}/checkpoint/customers")
     print(f"   • {VOLUME_PATH}/checkpoint/transactions")
     print(f"   • {VOLUME_PATH}/checkpoint/inventory")
     print(f"   • {VOLUME_PATH}/checkpoint/shipments")
     print(f"   • {VOLUME_PATH}/checkpoint/product_catalog_cdc")
-    print(f"📋 Schema directories (for schema inference demos only):")
+    print(f"[INFO] Schema directories (for schema inference demos only):")
     print(f"   • {VOLUME_PATH}/schema/transactions")
     print(f"   • {VOLUME_PATH}/schema/shipments")
-    print(f"📦 Archive directory:")
+    print(f"[INFO] Archive directory:")
     print(f"   • {VOLUME_PATH}/archive/inventory")
     
     # Schema strategies for each demo:
@@ -830,7 +830,7 @@ display(product_cdc_batch3.head())
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Data Generation Complete! 🎉
+# MAGIC ### Data Generation Complete! [SUCCESS]
 # MAGIC 
 # MAGIC All sample data has been generated and is ready for Auto Loader testing. You can now:
 # MAGIC 
@@ -839,7 +839,7 @@ display(product_cdc_batch3.head())
 # MAGIC 3. **Use the generated data paths** in your Auto Loader pipeline configurations
 # MAGIC 4. **Test the four scenarios** step by step to understand Auto Loader capabilities
 # MAGIC 
-# MAGIC Happy testing! 🚀
+# MAGIC Happy testing! [INFO]
 
 # COMMAND ----------
 
@@ -1007,7 +1007,7 @@ def cleanup_generated_data():
         dbutils.fs.mkdirs(f"{VOLUME_PATH}/archive/inventory")
         
         print("Recreated all directories")
-        print("🎉 Cleanup complete! Ready for fresh data generation.")
+        print("[SUCCESS] Cleanup complete! Ready for fresh data generation.")
         
     except Exception as e:
         print(f"Error during cleanup: {e}")
@@ -1027,7 +1027,7 @@ def cleanup_generated_data():
 # MAGIC 2. Run this cell
 # MAGIC 3. This will remove all generated data and recreate the directory structure
 # MAGIC 
-# MAGIC **⚠️ Warning:** This will delete all generated test data!
+# MAGIC **[WARNING] Warning:** This will delete all generated test data!
 
 # COMMAND ----------
 
@@ -1053,4 +1053,4 @@ def cleanup_generated_data():
 # MAGIC - [File Notification Mode](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/file-notification-mode#file-events)
 # MAGIC - [Schema Evolution](https://docs.databricks.com/ingestion/auto-loader/schema-evolution.html)
 # MAGIC 
-# MAGIC Happy testing! 🚀
+# MAGIC Happy testing! [INFO]

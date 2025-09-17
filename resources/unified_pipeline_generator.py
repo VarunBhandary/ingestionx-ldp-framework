@@ -91,11 +91,11 @@ class UnifiedPipelineGenerator:
         
         if errors:
             # Use stderr for error reporting to ensure it shows up
-            error_msg = "❌ Configuration validation failed!\n"
+            error_msg = "[ERROR] Configuration validation failed!\n"
             error_msg += "Pre-hook validation errors:\n"
             for i, error in enumerate(errors, 1):
                 error_msg += f"  {i}. {error}\n"
-            error_msg += "\n💡 Fix these errors before running bundle operations.\n"
+            error_msg += "\n[INFO] Fix these errors before running bundle operations.\n"
             error_msg += "   You can run: python src/utils/validate_config.py\n"
             error_msg += "   Or run: ./scripts/validate.sh\n"
             error_msg += "\n" + "="*60 + "\n"
@@ -112,7 +112,7 @@ class UnifiedPipelineGenerator:
             error_list = "\n".join([f"  {i}. {error}" for i, error in enumerate(errors, 1)])
             raise ValueError(f"Configuration validation failed with {len(errors)} errors:\n{error_list}\n\nRun 'python src/utils/validate_config.py' for detailed validation.")
         
-        print("✅ Pre-hook validation passed!", file=sys.stderr)
+        print("[SUCCESS] Pre-hook validation passed!", file=sys.stderr)
 
     def create_unified_pipeline(self, pipeline_group: str, group_rows: List[dict]) -> Pipeline:
         """Create a unified pipeline for a pipeline group using static generated notebooks"""
@@ -716,7 +716,7 @@ class UnifiedPipelineGenerator:
         manual_groups = []  # List of manual pipeline groups
         
         for group_name, group_df in pipeline_groups:
-            print(f"  📁 {group_name}: {len(group_df)} operations")
+            print(f"  [INFO] {group_name}: {len(group_df)} operations")
             
             # Check if this is a manual-only group
             group_operations = group_df.to_dict('records')
@@ -771,6 +771,130 @@ class UnifiedPipelineGenerator:
         print(f"\nGenerated {len(pipelines)} unified pipelines and {len(jobs)} scheduled jobs")
         return pipelines, jobs
 
+    def generate_notebooks(self):
+        """Generate notebooks using bundle variables."""
+        import sys
+        import os
+        from pathlib import Path
+        
+        # Add the notebook generator to the path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from notebook_generator import generate_pipeline_group_notebook, resolve_variables_in_config
+        import pandas as pd
+        
+        print("Generating notebooks with bundle variables...")
+        
+        # Load configuration
+        df = self.load_config()
+        
+        # Get bundle variables
+        bundle_variables = {
+            "catalog_name": self.bundle.variables["catalog_name"],
+            "schema_name": self.bundle.variables["schema_name"],
+            "volume_name": self.bundle.variables["volume_name"]
+        }
+        
+        print(f"  Using bundle variables: {bundle_variables}")
+        
+        # Group by pipeline_group
+        pipeline_groups = df.groupby('pipeline_group')
+        
+        # Create output directory
+        output_dir = "src/notebooks/generated"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate notebooks for each pipeline group
+        for group_name, group_df in pipeline_groups:
+            print(f"  Generating notebook for pipeline group: {group_name}")
+            
+            # Check if this is a manual-only group - skip DLT notebook generation
+            operation_types = group_df['operation_type'].unique()
+            if all(op_type == 'manual' for op_type in operation_types):
+                print(f"    Skipping DLT notebook generation for manual-only group: {group_name}")
+                continue
+            
+            # Convert group_df to operations_config format
+            operations_config = {}
+            for _, row in group_df.iterrows():
+                operation_type = row['operation_type']
+                if operation_type == 'bronze':
+                    op_name = f"bronze_{row['target_table'].split('.')[-1].replace('_new', '')}"
+                    
+                    # Parse the pipeline_config JSON for bronze operations
+                    try:
+                        pipeline_config = json.loads(row['pipeline_config'])
+                    except (json.JSONDecodeError, TypeError):
+                        pipeline_config = {}
+                    
+                    # Start with basic config and add all autoloader options from pipeline_config
+                    operations_config[op_name] = {
+                        'source_path': row['source_path'],
+                        'target_table': row['target_table'],
+                        'file_format': row['file_format']
+                    }
+                    
+                    # Add custom_expr if present
+                    if pd.notna(row.get('custom_expr', '')) and row['custom_expr']:
+                        operations_config[op_name]['custom_expr'] = row['custom_expr']
+                    
+                    # Add include_file_metadata if present
+                    if pd.notna(row.get('include_file_metadata', '')) and row['include_file_metadata']:
+                        operations_config[op_name]['include_file_metadata'] = row['include_file_metadata']
+                    
+                    # Add all autoloader options from the pipeline_config
+                    for key, value in pipeline_config.items():
+                        if key.startswith("cloudFiles.") or key in ["header", "inferSchema", "multiline"] or key == "schema":
+                            operations_config[op_name][key] = value
+                elif operation_type == 'silver':
+                    op_name = f"silver_{row['target_table'].split('.')[-1].replace('_scd2', '')}"
+                    
+                    # Parse the pipeline_config JSON for silver operations
+                    try:
+                        pipeline_config = json.loads(row['pipeline_config'])
+                    except (json.JSONDecodeError, TypeError):
+                        pipeline_config = {}
+                    
+                    # Start with basic config and add all DLT options from pipeline_config
+                    operations_config[op_name] = {
+                        'source_path': row['source_path'],  # This should be the bronze table
+                        'target_table': row['target_table']
+                    }
+                    
+                    # Add custom_expr if present
+                    if pd.notna(row.get('custom_expr', '')) and row['custom_expr']:
+                        operations_config[op_name]['custom_expr'] = row['custom_expr']
+                    
+                    # Add all DLT options from the pipeline_config
+                    for key, value in pipeline_config.items():
+                        operations_config[op_name][key] = value
+                elif operation_type == 'gold':
+                    op_name = f"gold_{row['target_table'].split('.')[-1] if row['target_table'] else 'analytics'}"
+                    
+                    # For gold operations, source_path contains the notebook path
+                    notebook_path = row['source_path']
+                    
+                    # Parse the pipeline_config JSON for additional gold operation settings
+                    try:
+                        pipeline_config = json.loads(row['pipeline_config'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                    
+                    operations_config[op_name] = {
+                        'source_path': notebook_path,  # This contains the notebook path
+                        'target_table': row['target_table'],
+                        'pipeline_config': row['pipeline_config']  # Keep the full config for gold operations
+                    }
+            
+            # Generate notebooks for this group using the notebook generator
+            try:
+                generate_pipeline_group_notebook(group_name, operations_config, output_dir, bundle_variables)
+                print(f"    Generated notebook: unified_{group_name}.py")
+            except Exception as e:
+                print(f"    Error generating notebook for {group_name}: {e}")
+                continue
+        
+        print(f"  Notebook generation completed. Output directory: {output_dir}")
+
 
 def load_resources(bundle: Bundle) -> Resources:
     """Load unified pipeline resources from configuration."""
@@ -783,6 +907,12 @@ def load_resources(bundle: Bundle) -> Resources:
     
     # Generate unified pipeline resources
     generator = UnifiedPipelineGenerator(bundle)
+    
+    # Generate notebooks first using bundle variables
+    print("Generating notebooks with bundle variables...")
+    generator.generate_notebooks()
+    
+    # Then generate pipelines and jobs
     pipelines, jobs = generator.generate_resources()
     
     print(f"\nAdding resources to bundle:")

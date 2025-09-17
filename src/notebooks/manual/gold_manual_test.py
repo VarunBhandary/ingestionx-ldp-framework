@@ -55,7 +55,7 @@ print(f"Volume: {volume}")
 
 # COMMAND ----------
 
-print("\n📈 Simulating analytics and reporting...")
+print("\n[INFO] Simulating analytics and reporting...")
 print("  - Reading from silver layer")
 print("  - Aggregating data for reporting")
 print("  - Calculating key metrics")
@@ -77,7 +77,7 @@ else:
     processing_time = 1.5  # Faster for basic analytics
 time.sleep(processing_time)
 
-print("✅ Gold layer processing completed successfully!")
+print("[SUCCESS] Gold layer processing completed successfully!")
 
 # COMMAND ----------
 
@@ -86,7 +86,7 @@ print("✅ Gold layer processing completed successfully!")
 
 # COMMAND ----------
 
-print("\n📊 Analytics Metrics:")
+print("\n[INFO] Analytics Metrics:")
 print("  - Total revenue: $1,234,567.89")
 print("  - Total customers: 10,000")
 print("  - Average order value: $123.45")
@@ -101,6 +101,6 @@ print("  - Reports generated: 5")
 
 # COMMAND ----------
 
-print("\n🎯 Gold layer task completed!")
+print("\n[INFO] Gold layer task completed!")
 print("🏁 Manual pipeline processing finished!")
 print(f"All {total_operations} operations completed successfully")

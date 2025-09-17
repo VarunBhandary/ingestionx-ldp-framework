@@ -51,7 +51,7 @@ print(f"Volume: {volume}")
 
 # COMMAND ----------
 
-print("\n🔄 Simulating data transformation...")
+print("\n[INFO] Simulating data transformation...")
 print("  - Reading from bronze layer")
 print("  - Applying business rules")
 print("  - Data cleansing and validation")
@@ -71,7 +71,7 @@ else:
     processing_time = 2  # Faster for dev/test
 time.sleep(processing_time)
 
-print("✅ Silver layer processing completed successfully!")
+print("[SUCCESS] Silver layer processing completed successfully!")
 
 # COMMAND ----------
 
@@ -80,7 +80,7 @@ print("✅ Silver layer processing completed successfully!")
 
 # COMMAND ----------
 
-print("\n📊 Transformation Metrics:")
+print("\n[INFO] Transformation Metrics:")
 print("  - Records transformed: 1,000")
 print("  - Data quality score: 98%")
 print(f"  - Processing time: {processing_time:.1f} seconds")
@@ -92,5 +92,5 @@ print(f"  - Retry count: {retry_count}")
 
 # COMMAND ----------
 
-print("\n🎯 Silver layer task completed!")
+print("\n[INFO] Silver layer task completed!")
 print(f"Next: Gold layer processing (operation {int(operation_index) + 1})")
