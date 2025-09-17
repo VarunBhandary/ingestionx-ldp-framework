@@ -659,6 +659,81 @@ This function:
 - ✅ Recreates clean directory structure
 - ✅ Regenerates initial schema files
 
+## ✅ **Configuration Validation**
+
+The framework provides comprehensive validation at multiple levels to ensure your configuration is correct before deployment.
+
+### **Bundle Validation Process**
+
+When you run `databricks bundle validate`, the framework performs extensive validation:
+
+```bash
+# Validate your configuration
+databricks bundle validate --profile dev
+```
+
+### **Validation Layers**
+
+#### **1. Framework-Level Validation (ConfigParser)**
+The framework validates your TSV configuration and catches errors like:
+
+- **Missing required columns**: `Missing required columns: ['operation_type', 'pipeline_group']`
+- **Invalid operation types**: `Invalid operation types: ['invalid_type']. Valid types: ['bronze', 'silver', 'gold', 'manual']`
+- **Invalid source types**: `Invalid source types: ['invalid_source']. Valid types: ['file', 'table', 'notebook']`
+- **Invalid file formats**: `Invalid file formats: ['invalid_format']. Valid formats: ['json', 'parquet', 'csv', 'avro', 'orc', '']`
+- **Invalid file paths**: `Row 3: Invalid file path format: /invalid/path. Should start with /Volumes/, s3://, abfss://, or src/`
+- **Invalid JSON**: `Row 8: Invalid JSON in pipeline_config: {"header": "true", "invalid_json": }`
+- **Invalid email formats**: `Row 11: Invalid email format in recipients: invalid-email-format`
+- **Serverless cluster requirements**: `Row 13: serverless cluster requires warehouse_id in cluster_config`
+- **Parameter validation**: `Row 16: Parameter 'invalid_param' must be a string, number, or boolean`
+
+#### **2. Databricks API Validation**
+The Databricks bundle validation catches API-level errors:
+
+```
+Error: expected string, found map
+  at resources.jobs.manual_test_pipeline17_job.tasks[0].notebook_task.base_parameters.invalid_param
+```
+
+### **What Gets Validated**
+
+| Category | Validation | Example Error |
+|----------|------------|---------------|
+| **Required Fields** | All required columns present | `Missing required columns: ['operation_type']` |
+| **Operation Types** | Valid operation types | `Invalid operation types: ['invalid_type']` |
+| **Source Types** | Valid source types | `Invalid source types: ['invalid_source']` |
+| **File Formats** | Valid file formats | `Invalid file formats: ['invalid_format']` |
+| **Path Formats** | Unity Catalog/S3/ADLS paths | `Invalid file path format: /invalid/path` |
+| **JSON Syntax** | Valid JSON in all fields | `Invalid JSON in pipeline_config: {...}` |
+| **Email Formats** | Valid email addresses | `Invalid email format in recipients: invalid-email` |
+| **Cluster Config** | Valid cluster sizes and requirements | `serverless cluster requires warehouse_id` |
+| **Parameters** | Valid parameter types and names | `Parameter 'invalid_param' must be a string, number, or boolean` |
+| **API Compatibility** | Databricks API requirements | `expected string, found map` |
+
+### **Validation Commands**
+
+```bash
+# Validate configuration
+databricks bundle validate --profile dev
+
+# Check configuration parsing
+python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
+
+# Validate JSON configuration
+python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
+
+# Test resource generation
+python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
+```
+
+### **Error Resolution**
+
+1. **Read the error message carefully** - Each error tells you exactly what's wrong
+2. **Check the row number** - Errors reference specific rows in your TSV
+3. **Verify the format** - Ensure paths, JSON, and email formats are correct
+4. **Check required fields** - Make sure all required columns are present
+5. **Validate JSON syntax** - Use a JSON validator for complex configurations
+
 ## 🔍 **Troubleshooting**
 
 ### **Common Issues**
@@ -709,7 +784,7 @@ Before running the demo, verify these items:
 # Check pipeline status
 databricks bundle run <pipeline_name> --profile dev --debug
 
-# Validate configuration
+# Validate configuration (comprehensive validation)
 databricks bundle validate --profile dev
 
 # Check generated notebooks
@@ -718,6 +793,15 @@ ls -la src/notebooks/generated/
 # Verify configuration consistency
 grep -E "CATALOG =|SCHEMA =|VOLUME_NAME =" src/notebooks/manual/data_generation_demo.py
 grep -E "/Volumes/" config/unified_pipeline_config.tsv | head -5
+
+# Test configuration parsing
+python -c "import pandas as pd; df = pd.read_csv('config/unified_pipeline_config.tsv', sep='\t'); print(df.head())"
+
+# Validate JSON configuration
+python -c "import json; json.loads('{\"test\": \"value\"}'); print('JSON valid')"
+
+# Test resource generation
+python -c "from resources.unified_pipeline_generator import UnifiedPipelineGenerator; print('Generator imported successfully')"
 ```
 
 ## 📚 **Documentation**
@@ -751,6 +835,8 @@ grep -E "/Volumes/" config/unified_pipeline_config.tsv | head -5
 - **Error handling**: Proper dependency management and failure handling
 - **Monitoring**: Job execution tracking and logging
 - **Data quality**: Corrupt data handling and schema validation
+- **Configuration validation**: Comprehensive validation at multiple levels
+- **Clear error messages**: Specific, actionable error messages for easy troubleshooting
 
 ## 🔍 **Advanced Features**
 
@@ -774,6 +860,220 @@ grep -E "/Volumes/" config/unified_pipeline_config.tsv | head -5
 - **No hardcoding**: Framework picks up any new options without code changes
 - **Future-proof**: Automatically supports new Auto Loader features as they're released
 - **Option validation**: Built-in validation against Microsoft documentation standards
+
+## ❓ **Frequently Asked Questions (FAQ)**
+
+### **Getting Started**
+
+#### **Q: What is this framework and why should I use it?**
+A: This is a unified pipeline framework for Databricks that supports both DLT (Delta Live Tables) pipelines and manual notebook-based jobs. It provides:
+- **Single configuration**: Manage all pipeline types in one TSV file
+- **Auto Loader integration**: Comprehensive demos showcasing real-world data ingestion scenarios
+- **Variable resolution**: Environment-specific configuration using Databricks bundle variables
+- **Comprehensive validation**: Multiple layers of validation to catch errors before deployment
+
+#### **Q: I'm new to Databricks Asset Bundles (DAB). How does this work?**
+A: Databricks Asset Bundles is a deployment framework that allows you to:
+- **Define resources** (pipelines, jobs, notebooks) in code
+- **Use variables** for environment-specific configuration
+- **Deploy consistently** across dev/staging/prod environments
+- **Validate configurations** before deployment
+
+This framework uses DAB to automatically generate and deploy your pipelines based on TSV configuration.
+
+#### **Q: What's the difference between DLT pipelines and manual jobs?**
+A: 
+- **DLT Pipelines**: Auto-generated Delta Live Tables pipelines for bronze/silver operations with Auto Loader integration
+- **Manual Jobs**: Custom notebook-based jobs where you write the code yourself, with full control and parameter passing
+
+### **Configuration**
+
+#### **Q: How do I configure my environment?**
+A: You need to update two files:
+1. **`config/unified_pipeline_config.tsv`**: Replace `${var.catalog_name}`, `${var.schema_name}`, `${var.volume_name}` with your actual values
+2. **`src/notebooks/manual/data_generation_demo.py`**: Update `CATALOG`, `SCHEMA`, `VOLUME_NAME` variables
+
+#### **Q: What are the required columns in the TSV configuration?**
+A: The TSV must have these columns:
+- `operation_type`: bronze, silver, gold, or manual
+- `pipeline_group`: Groups related operations together
+- `source_type`: file, table, or notebook
+- `source_path`: Path to source data or notebook
+- `target_table`: Target table name
+- `file_format`: csv, json, parquet, etc. (empty for manual)
+- `trigger_type`: file or time
+- `schedule`: Cron expression
+- `pipeline_config`: JSON configuration
+- `cluster_size`: small, medium, large, or serverless
+- `cluster_config`: JSON cluster configuration
+- `notifications`: JSON notification settings
+- `custom_expr`: Custom expressions (optional)
+- `parameters`: JSON parameters for manual operations
+
+#### **Q: How do I use variables in my configuration?**
+A: Use Databricks bundle variables in your TSV:
+- `${var.catalog_name}`: Your Unity Catalog catalog
+- `${var.schema_name}`: Your Unity Catalog schema  
+- `${var.volume_name}`: Your volume name
+
+These are defined in `databricks.yml` and resolved during deployment.
+
+### **Validation and Errors**
+
+#### **Q: How do I validate my configuration?**
+A: Run `databricks bundle validate --profile dev` to validate your configuration. This will catch:
+- Missing required columns
+- Invalid operation types, source types, file formats
+- Invalid file paths and JSON syntax
+- Email format errors
+- Cluster configuration issues
+- Parameter validation errors
+
+#### **Q: What if I get validation errors?**
+A: The framework provides clear, specific error messages:
+1. **Read the error message** - It tells you exactly what's wrong
+2. **Check the row number** - Errors reference specific rows in your TSV
+3. **Verify the format** - Ensure paths, JSON, and email formats are correct
+4. **Check required fields** - Make sure all required columns are present
+
+#### **Q: Why does my bundle validate pass but deployment fails?**
+A: Bundle validate checks configuration syntax and basic requirements. Deployment failures usually indicate:
+- **Permission issues**: Check Unity Catalog permissions
+- **Resource conflicts**: Names already exist in your workspace
+- **Network issues**: Connectivity to Databricks workspace
+- **Runtime errors**: Issues that only appear when actually running the code
+
+### **Auto Loader**
+
+#### **Q: What Auto Loader features are supported?**
+A: The framework supports all major Auto Loader features:
+- **File formats**: CSV, JSON, Parquet, Avro, ORC
+- **Schema strategies**: Fixed schema, schema inference, schema evolution
+- **File management**: Checkpointing, archiving, clean source
+- **Data quality**: Corrupt data handling, rescued data columns
+- **Performance**: Batch processing, file notification mode
+
+#### **Q: How do I configure Auto Loader options?**
+A: Add Auto Loader options to the `pipeline_config` column as JSON:
+```json
+{
+  "cloudFiles.checkpointLocation": "/Volumes/catalog/schema/volume/checkpoint/table",
+  "cloudFiles.maxFilesPerTrigger": "100",
+  "cloudFiles.allowOverwrites": "false",
+  "header": "true",
+  "cloudFiles.rescuedDataColumn": "corrupt_data"
+}
+```
+
+#### **Q: What's the difference between file and time triggers?**
+A: 
+- **File trigger**: Processes files as they arrive (real-time)
+- **Time trigger**: Processes files on a schedule (batch)
+
+### **Manual Operations**
+
+#### **Q: How do I create manual jobs?**
+A: Set `operation_type` to `manual` and provide:
+- `source_path`: Path to your notebook (must start with `src/`)
+- `pipeline_config`: Order and dependency configuration
+- `parameters`: User-defined parameters as JSON
+
+#### **Q: How do I chain manual operations?**
+A: Use the `pipeline_config` column:
+```json
+{
+  "order": 1,
+  "depends_on": 2
+}
+```
+- `order`: Execution order (1, 2, 3, etc.)
+- `depends_on`: Wait for this order to complete first
+
+#### **Q: How do I pass parameters to manual notebooks?**
+A: Use the `parameters` column:
+```json
+{
+  "batch_size": 1000,
+  "debug_mode": true,
+  "catalog": "${var.catalog_name}"
+}
+```
+
+In your notebook, access them with:
+```python
+batch_size = dbutils.widgets.get("batch_size", "500")
+debug_mode = dbutils.widgets.get("debug_mode", "false").lower() == "true"
+```
+
+### **Deployment and Operations**
+
+#### **Q: How do I deploy my pipelines?**
+A: 
+```bash
+# Validate configuration
+databricks bundle validate --profile dev
+
+# Deploy to Databricks
+databricks bundle deploy --profile dev
+
+# Run specific pipeline
+databricks bundle run <pipeline_name> --profile dev
+```
+
+#### **Q: How do I monitor my pipelines?**
+A: 
+- **Databricks UI**: Go to Workflows → Delta Live Tables or Jobs
+- **Pipeline logs**: Check the pipeline execution logs
+- **Data quality**: Monitor data quality metrics in Unity Catalog
+- **Notifications**: Set up email notifications for success/failure
+
+#### **Q: How do I update my configuration?**
+A: 
+1. Update your TSV configuration
+2. Run `databricks bundle validate --profile dev`
+3. Run `databricks bundle deploy --profile dev`
+4. The framework will update existing resources
+
+### **Troubleshooting**
+
+#### **Q: My pipeline fails with "Volume not found" error.**
+A: This usually means:
+- Unity Catalog is not enabled in your workspace
+- You don't have permissions to create volumes
+- The volume path in your TSV doesn't match your actual catalog/schema/volume names
+- You need to run the data generation notebook first
+
+#### **Q: I get "Path mismatch" errors.**
+A: Ensure both files use the same catalog/schema/volume names:
+- Check `config/unified_pipeline_config.tsv`
+- Check `src/notebooks/manual/data_generation_demo.py`
+- Run the verification commands in the Configuration Setup section
+
+#### **Q: My JSON configuration is invalid.**
+A: Common JSON issues:
+- Missing quotes around keys: `{key: "value"}` should be `{"key": "value"}`
+- Trailing commas: `{"a": 1, "b": 2,}` should be `{"a": 1, "b": 2}`
+- Unescaped quotes: `{"message": "He said "hello""}` should be `{"message": "He said \"hello\""}`
+
+#### **Q: My serverless cluster fails.**
+A: Serverless clusters require:
+- Valid `warehouse_id` in `cluster_config`
+- Not a placeholder value like `"your_warehouse_id"`
+- Proper permissions to use the warehouse
+
+### **Advanced Usage**
+
+#### **Q: How do I add custom Auto Loader options?**
+A: Add any Auto Loader option to your `pipeline_config` JSON. The framework automatically includes all options without code changes.
+
+#### **Q: How do I create a silver-only pipeline?**
+A: Create a pipeline group with only silver operations. The framework will create a DLT pipeline that reads from existing bronze tables.
+
+#### **Q: How do I handle schema evolution?**
+A: Use `cloudFiles.schemaEvolutionMode: "rescue"` in your pipeline config. This captures new fields in a rescued data column.
+
+#### **Q: How do I archive processed files?**
+A: Use `cloudFiles.cleanSource: "MOVE"` with `cloudFiles.cleanSource.moveDestination` to archive files after processing.
 
 ## 🤝 **Contributing**
 
